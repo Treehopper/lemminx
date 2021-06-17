@@ -24,9 +24,11 @@ import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConsta
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.FORMATTING_ID;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.FORMATTING_RANGE_ID;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.HOVER_ID;
+import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.LINKED_EDITING_RANGE_ID;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.LINK_ID;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.REFERENCES_ID;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.RENAME_ID;
+import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.SELECTION_RANGE_ID;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_CODE_ACTION;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_CODE_LENS;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_COMPLETION;
@@ -36,10 +38,14 @@ import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConsta
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_HIGHLIGHT;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_HOVER;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_LINK;
+import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_LINKED_EDITING_RANGE;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_REFERENCES;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_RENAME;
+import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_SELECTION_RANGE;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TEXT_DOCUMENT_TYPEDEFINITION;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.TYPEDEFINITION_ID;
+import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.WORKSPACE_EXECUTE_COMMAND;
+import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.WORKSPACE_EXECUTE_COMMAND_ID;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.WORKSPACE_WATCHED_FILES;
 import static org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesConstants.WORKSPACE_WATCHED_FILES_ID;
 
@@ -56,6 +62,7 @@ import org.eclipse.lemminx.settings.XMLFormattingOptions;
 import org.eclipse.lemminx.settings.XMLSymbolSettings;
 import org.eclipse.lsp4j.ClientCapabilities;
 import org.eclipse.lsp4j.DidChangeWatchedFilesRegistrationOptions;
+import org.eclipse.lsp4j.ExecuteCommandOptions;
 import org.eclipse.lsp4j.FileSystemWatcher;
 import org.eclipse.lsp4j.Registration;
 import org.eclipse.lsp4j.RegistrationParams;
@@ -65,7 +72,7 @@ import org.eclipse.lsp4j.services.LanguageClient;
 
 /**
  * Manager for capability related tasks
- * 
+ *
  * A capability is a service (Formatting, Highlighting, ...) that the server is
  * able to provide. This server will tell the client about the services it is
  * capable of.
@@ -86,7 +93,7 @@ public class XMLCapabilityManager {
 	/**
 	 * Creates and sets a {@link ClientCapabilitiesWrapper} instance formed from
 	 * clientCapabilities
-	 * 
+	 *
 	 * @param clientCapabilities
 	 * @param extendedClientCapabilities
 	 */
@@ -166,6 +173,9 @@ public class XMLCapabilityManager {
 		if (this.getClientCapabilities().isReferencesDynamicRegistrationSupported()) {
 			registerCapability(REFERENCES_ID, TEXT_DOCUMENT_REFERENCES);
 		}
+		if (this.getClientCapabilities().isLinkedEditingRangeDynamicRegistered()) {
+			registerCapability(LINKED_EDITING_RANGE_ID, TEXT_DOCUMENT_LINKED_EDITING_RANGE);
+		}
 		if (this.getClientCapabilities().isDidChangeWatchedFilesRegistered()) {
 			registerWatchedFiles();
 		}
@@ -181,14 +191,19 @@ public class XMLCapabilityManager {
 		registerCapability(WORKSPACE_WATCHED_FILES_ID, WORKSPACE_WATCHED_FILES, options);
 	}
 
+	public void registerExecuteCommand(List<String> commands) {
+		registerCapability(WORKSPACE_EXECUTE_COMMAND_ID, WORKSPACE_EXECUTE_COMMAND,
+				new ExecuteCommandOptions(commands));
+	}
+
 	/**
 	 * Registers(indicates the servers ability to support the service) all
 	 * capabilities that have the ability to be turned on/off on the client side
 	 * through preferences.
-	 * 
+	 *
 	 * In the case the preference is set to off/false this server will tell the
 	 * cliet it does not support this capability.
-	 * 
+	 *
 	 * If a capability is not dynamic, it's handled by
 	 * {@link ServerCapabilitiesInitializer}
 	 */
@@ -203,6 +218,10 @@ public class XMLCapabilityManager {
 		if (this.getClientCapabilities().isRangeFormattingDynamicRegistrationSupported()) {
 			toggleCapability(formattingPreferences.isEnabled(), FORMATTING_RANGE_ID,
 					ServerCapabilitiesConstants.TEXT_DOCUMENT_RANGE_FORMATTING, null);
+		}
+
+		if (this.getClientCapabilities().isSelectionRangeDynamicRegistered()) {
+			toggleCapability(true, SELECTION_RANGE_ID, TEXT_DOCUMENT_SELECTION_RANGE, null);
 		}
 
 		XMLSymbolSettings symbolSettings = this.textDocumentService.getSharedSymbolSettings();

@@ -1,5 +1,120 @@
 # Change Log
 
+## [0.16.2](https://github.com/eclipse/lemminx/milestone/24?closed=1) (May 18, 2021)
+
+### Bug Fixes
+
+ * Fix range formatting in the binary server. See [#1035](https://github.com/eclipse/lemminx/issues/1035)
+ * Mitigate Billion Laughs vulnerability. See [#1038](https://github.com/eclipse/lemminx/pull/1038)
+
+## [0.16.1](https://github.com/eclipse/lemminx/milestone/22?closed=1) (May 17, 2021)
+
+### Enhancements
+
+ * Improve the error range for unterminated elements, and use `relatedInformation` to show the expected close tag placement. See [#963](https://github.com/eclipse/lemminx/issues/963).
+ * Add setting `xml.completion.autoCloseRemovesContent` to prevent auto self-closing feature from deleting content. See [#1009](https://github.com/eclipse/lemminx/pull/1009).
+ * Change name of telemetry events to use `.`. See [#1017](https://github.com/eclipse/lemminx/pull/1017).
+ * Output the language server error stream during development. See [#1019](https://github.com/eclipse/lemminx/issues/1019).
+ * Update Guava to 30.1.1. See [#1025](https://github.com/eclipse/lemminx/issues/1025)
+ * Update Xerces to 2.12.1. See [#1013](https://github.com/eclipse/lemminx/issues/1013).
+
+### Bug Fixes
+
+ * Fix `xml.validation.noGrammar` setting. See [#1024](https://github.com/eclipse/lemminx/pull/1024).
+ * Fix XML 1.1 support in the binary server. See [#1027](https://github.com/eclipse/lemminx/issues/1027).
+ * Fix revalidation commands in the binary server. See [#1031](https://github.com/eclipse/lemminx/issues/1031).
+ * Return `null` when receiving a request on a document before it has been opened. See [#957](https://github.com/eclipse/lemminx/issues/957).
+ * Update the binary configuration so that the server works with an LSP 3.15 client. See [#1022](https://github.com/eclipse/lemminx/pull/1022).
+
+## [0.16.0](https://github.com/eclipse/lemminx/milestone/21?closed=1) (April 13, 2021)
+
+### Enhancements
+
+ * Add `telemetry/event` support. See [#430](https://github.com/eclipse/lemminx/issues/430).
+ * Add `CancelChecker` as parameter to `ICompletionParticipant` methods. See [#992](https://github.com/eclipse/lemminx/pull/992).
+ * Add ability to read proxy configuration from environment variables. See [#1012](https://github.com/eclipse/lemminx/pull/1012)
+
+### Bug Fixes
+
+ * Fix rename not completing when using the binary. See [#990](https://github.com/eclipse/lemminx/pull/990).
+ * Fix a test failure. See [#1003](https://github.com/eclipse/lemminx/issues/1003).
+ * Fix NPE when hovering on a malformed document. See [#984](https://github.com/eclipse/lemminx/issues/984).
+ * `trimTrailingWhitespace` option is not respected by `textDocument/formatting`. See [#827](https://github.com/eclipse/lemminx/issues/827).
+ * Add a `CONTRIBUTING.md`. See [#998](https://github.com/eclipse/lemminx/issues/998).
+ * Use `User-Agent: LemMinX` when downloading schemas to prevent HTTP 403 when using Java 8. See [#994](https://github.com/eclipse/lemminx/pull/994).
+
+## [0.15.0](https://github.com/eclipse/lemminx/milestone/20?closed=1) (February 2, 2021)
+
+### Enhancements
+ * Generate a native binary using GraalVM. See [#860](https://github.com/eclipse/lemminx/pull/860).
+ * Indicate if the server is a binary in the startup message. See [#949](https://github.com/eclipse/lemminx/issues/949).
+ * Allow LemMinX extensions to contribute to `WorkspaceService`. See [#966](https://github.com/eclipse/lemminx/pull/966).
+ * Add new formatting setting `xml.format.splitAttributesIndentSize`. See [#952](https://github.com/eclipse/lemminx/pull/952).
+ * Disable XSD validation when `xsi:schemaLocation` doesn't declare the hint for the document element root. See [#953](https://github.com/eclipse/lemminx/pull/953).
+ * Manage namespaces / prefix validation with a setting. See [#960](https://github.com/eclipse/lemminx/issues/960).
+
+### Bug Fixes
+ * Avoid trailing space in processing instructions. See [redhat-developer/vscode-xml#372](https://github.com/redhat-developer/vscode-xml/issues/372).
+ * LemMinX no longer crashes if a LemMinX extension class cannot be created. See [#967](https://github.com/eclipse/lemminx/issues/967).
+ * Single `<` no longer has code action to close with `/>`. See [redhat-developer/vscode-xml#373](https://github.com/redhat-developer/vscode-xml/issues/373).
+ * Catch errors from any participants. See [#946](https://github.com/eclipse/lemminx/issues/946).
+ * Avoid sending duplicate `client/registerCapability` for `workspace/executeCommand`. See [#937](https://github.com/eclipse/lemminx/issues/937).
+ * Use `kill -0` instead of `ps -p` in `ParentProcessWatcher`. See [#936](https://github.com/eclipse/lemminx/issues/936).
+ * Prevent `ClassCastException` when generating document links for XML catalogs. See [#932](https://github.com/eclipse/lemminx/issues/932).
+ * Register `org.eclipse.lsp4j.FileEvent` for reflection. See [#979](https://github.com/eclipse/lemminx/issues/979).
+ * Prevent URLs in `uri` attributes in catalogs from raising exceptions. See [#977](https://github.com/eclipse/lemminx/issues/977).
+
+## [0.14.1](https://github.com/eclipse/lemminx/milestone/19?closed=1) (November 10, 2020)
+
+### Bug Fixes
+
+ * NPE When there's a validation error. See [#927](https://github.com/eclipse/lemminx/issues/927).
+ * Symbols are not computed when ResultLimitExceededException is thrown. See [#928](https://github.com/eclipse/lemminx/issues/928).
+
+## [0.14.0](https://github.com/eclipse/lemminx/milestone/18?closed=1) (November 6, 2020)
+
+### Enhancements
+
+ * Outline should display referenced DTD / XSD from the current XML. See [#892](https://github.com/eclipse/lemminx/issues/892).
+ * XML catalog `nextCatalog/@catalog` documentLink support. See [#845](https://github.com/eclipse/lemminx/issues/845).
+ * Format for `xsi:schemaLocation`. See [#825](https://github.com/eclipse/lemminx/issues/825).
+ * Customize documentSymbols (Outline) with participant. See [#824](https://github.com/eclipse/lemminx/issues/824).
+ * Support for `xml/executeClientCommand` access to server from extension. See [#596](https://github.com/eclipse/lemminx/issues/596).
+ * Document links in catalog's `<system uri="..." />`. See [#220](https://github.com/eclipse/lemminx/issues/220).
+ * Command to reload remote schema. See [vscode-xml#284](https://github.com/redhat-developer/vscode-xml/issues/284).
+ * Customize symbols in the outline. See [vscode-xml#220](https://github.com/redhat-developer/vscode-xml/issues/220).
+
+### Bug Fixes
+
+ * When associating a DTD through `<?xml-model...?>`, DTD-related errors should be aggregated. See [#918](https://github.com/eclipse/lemminx/issues/918).
+ * Can't use XML catalog with XSD files that have `<xs:include />`. See [#914](https://github.com/eclipse/lemminx/issues/914).
+ * Empty log file string crashes the server. See [#904](https://github.com/eclipse/lemminx/issues/904).
+ * Incorrect diagnostic error range for `MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ELEMENTDECL`. See [#902](https://github.com/eclipse/lemminx/issues/902).
+ * CodeAction which raises an Exception prevents other CodeActions from being generated. See [#900](https://github.com/eclipse/lemminx/issues/900).
+ * Symbols Max Items Computed doesn't work for 0. See [#898](https://github.com/eclipse/lemminx/issues/898).
+ * Code Action for `</` with no matching open tag doesn't fix content. See [#889](https://github.com/eclipse/lemminx/issues/889).
+ * Incorrect error range for cvc-complex-type.2.3. See [#885](https://github.com/eclipse/lemminx/issues/885).
+ * Code Action to close root element closing tag inserts wrong closing tag. See [#878](https://github.com/eclipse/lemminx/issues/878).
+ * Improve ETagRequired error range. See [#876](https://github.com/eclipse/lemminx/issues/876).
+ * Improve error range for ETagUnterminated . See [#875](https://github.com/eclipse/lemminx/issues/875).
+ * Error range for empty element cvc-datatype-valid.1.2.3. See [#871](https://github.com/eclipse/lemminx/issues/871).
+ * Incorrect error range for cvc-datatype-valid.1.2.3. See [#864](https://github.com/eclipse/lemminx/issues/864).
+ * `StringIndexOutOfBoundsException` in `EntityNotDeclaredCodeAction.getEntityName`. See [#862](https://github.com/eclipse/lemminx/issues/862).
+ * Infinite loop inside `LSPMessageFormatter` for some cases. See [#856](https://github.com/eclipse/lemminx/issues/856).
+ * XML validation should aggregate DTD errors in doctype. See [#853](https://github.com/eclipse/lemminx/issues/853).
+ * DTD hyperlink with XML catalog and `PUBLIC` declaration doesn't work. See [#850](https://github.com/eclipse/lemminx/issues/850).
+ * XML completion based on DTD with XML catalog and `PUBLIC` declaration doesn't work. See [#849](https://github.com/eclipse/lemminx/issues/849).
+ * DTD validation doesn't work with XML catalog and `PUBLIC` declaration. See [#847](https://github.com/eclipse/lemminx/issues/847).
+ * Null Pointer Exception in catalog extension. See [#833](https://github.com/eclipse/lemminx/issues/833).
+ * XML validation should aggregate XSD errors where is referenced. See [#768](https://github.com/eclipse/lemminx/issues/768).
+ * `CacheResourcesManagerTest.testAvailableCache` fails sometimes. See [#753](https://github.com/eclipse/lemminx/issues/753).
+ * `completionRequest.getReplaceRange()` is erroneous in text that contains `/`. See [#723](https://github.com/eclipse/lemminx/issues/723).
+ * Formatting comments which have no end should not generate `-->`. See [vscode-xml#347](https://github.com/redhat-developer/vscode-xml/issues/347).
+ * Don't send invalid catalog notifications for paths with file schemes. See [vscode-xml#289](https://github.com/redhat-developer/vscode-xml/issues/289).
+ * EntityNotDeclared quick fix doesn't use the proper indentation settings. See [vscode-xml#267](https://github.com/redhat-developer/vscode-xml/issues/267).
+ * XSD with `targetNamespace` cannot be used with `xml.fileAssociations`. See [vscode-xml#223](https://github.com/redhat-developer/vscode-xml/issues/223).
+ * `xml.fileAssociations` does not work with DTD files. See [vscode-xml#184](https://github.com/redhat-developer/vscode-xml/issues/184).
+
 ## [0.13.1](https://github.com/eclipse/lemminx/milestone/17?closed=1) (July 6, 2020)
 
 ### Bug Fixes
@@ -176,7 +291,7 @@
  * Add completion for `comment` and `#region`. See [#54](https://github.com/eclipse/lemminx/issues/54)
  * Add completion for `CDATA` block. See [#168](https://github.com/redhat-developer/vscode-xml/issues/168)
  * Find definition for start/end tag element. See [#535](https://github.com/eclipse/lemminx/issues/535)
- * Show `relevant XML` completion options based on XML Schema. See [#347](https://github.com/eclipse/lemminx/issues/347) 
+ * Show `relevant XML` completion options based on XML Schema. See [#347](https://github.com/eclipse/lemminx/issues/347)
  * Improve `XSD source` information for XML completion. See [#529](https://github.com/eclipse/lemminx/issues/529)
  * Add support for `textDocument/documentHighlight` for XML Schema types. See [#470](https://github.com/eclipse/lemminx/issues/470)
  * Add support for `textDocument/completion` for xs:element/@name / xs:extension/@base. See [#451](https://github.com/eclipse/lemminx/issues/451)
@@ -188,12 +303,12 @@
  * Add support for `textDocument/codelens` for XML Schema types. See [#55](https://github.com/eclipse/lemminx/issues/55)
  * Add support for clickable`XSD CodeLens`. See [#490](https://github.com/eclipse/lemminx/issues/490)
  * Improved XML validation when XSD files are saved. See [#506](https://github.com/eclipse/lemminx/issues/506)
- 
+
 ### Bug Fixes
 
  * Hover markup response ignored the hover client capability. See [#525](https://github.com/eclipse/lemminx/issues/525)
  * Completion capability was lost in specific scenarios. See [#522](https://github.com/eclipse/lemminx/issues/522)
- * Fixed NPE in `textDocument/definition` in XSD files. See [#488](https://github.com/eclipse/lemminx/issues/488) 
+ * Fixed NPE in `textDocument/definition` in XSD files. See [#488](https://github.com/eclipse/lemminx/issues/488)
  * Fixed case sensitivity problems for element and attribute names. See [#433](https://github.com/eclipse/lemminx/issues/433)
  * Selection formatting ignores attribute indentation preference. See [#429](https://github.com/eclipse/lemminx/issues/429)
  * Fixed error range for `EntityNotDeclared`. See [#518](https://github.com/eclipse/lemminx/issues/518)
@@ -308,7 +423,7 @@
 * Self closing tag causes NPE in `cvc_complex_type_2_1CodeAction.doCodeAction`. See [#339](https://github.com/eclipse/lemminx/issues/339).
 * Closing CDATA tag throws exception. See [#341](https://github.com/eclipse/lemminx/issues/341).
 * Fix formatting issue with processing instruction attributes. See [#331](https://github.com/eclipse/lemminx/issues/331).
-  
+
 ## [0.4.0](https://github.com/eclipse/lemminx/milestone/4?closed=1) (March 07, 2019)
 
 ### Enhancements

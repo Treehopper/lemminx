@@ -24,12 +24,13 @@ import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.InsertTextFormat;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.jsonrpc.CancelChecker;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 
 public class XMLReferencesCompletionParticipant extends CompletionParticipantAdapter {
 
 	@Override
-	public void onXMLContent(ICompletionRequest request, ICompletionResponse response) throws Exception {
+	public void onXMLContent(ICompletionRequest request, ICompletionResponse response, CancelChecker cancelChecker) throws Exception {
 		int offset = request.getOffset();
 		final DOMNode node = getNodeAt(request.getNode(), offset);	
 		if (node != null) {			
@@ -43,7 +44,7 @@ public class XMLReferencesCompletionParticipant extends CompletionParticipantAda
 				item.setKind(CompletionItemKind.Property);
 				item.setDocumentation(Either.forLeft(label));
 				item.setFilterText(insertText);
-				item.setTextEdit(new TextEdit(range, insertText));
+				item.setTextEdit(Either.forLeft(new TextEdit(range, insertText)));
 				item.setInsertTextFormat(InsertTextFormat.PlainText);
 				response.addCompletionItem(item);
 			});

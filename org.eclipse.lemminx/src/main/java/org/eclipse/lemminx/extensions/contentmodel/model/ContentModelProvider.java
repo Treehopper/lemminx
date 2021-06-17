@@ -15,6 +15,7 @@ package org.eclipse.lemminx.extensions.contentmodel.model;
 import java.util.Collection;
 
 import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMRange;
 
 /**
  * Content model provider API.
@@ -22,13 +23,48 @@ import org.eclipse.lemminx.dom.DOMDocument;
  */
 public interface ContentModelProvider {
 
+	public class Identifier {
+
+		private final String publicId;
+
+		private final String systemId;
+
+		private final DOMRange range;
+
+		private final String kind;
+
+		public Identifier(String publicId, String systemId, DOMRange range, String kind) {
+			this.publicId = publicId;
+			this.systemId = systemId;
+			this.range = range;
+			this.kind = kind;
+		}
+
+		public String getPublicId() {
+			return publicId;
+		}
+
+		public String getSystemId() {
+			return systemId;
+		}
+
+		public DOMRange getRange() {
+			return range;
+		}
+
+		public String getKind() {
+			return kind;
+		}
+
+	}
+
 	/**
 	 * Returns the content model provider by using standard association
 	 * (xsi:schemaLocation, xsi:noNamespaceSchemaLocation, doctype) an dnull
 	 * otherwise.
 	 * 
 	 * @param document
-	 * @param internal 
+	 * @param internal
 	 * @return the content model provider by using standard association
 	 *         (xsi:schemaLocation, xsi:noNamespaceSchemaLocation, doctype) an dnull
 	 *         otherwise.
@@ -37,7 +73,7 @@ public interface ContentModelProvider {
 
 	boolean adaptFor(String uri);
 
-	Collection<String> getSystemIds(DOMDocument xmlDocument, String namespaceURI);
+	Collection<Identifier> getIdentifiers(DOMDocument xmlDocument, String namespaceURI);
 
 	CMDocument createCMDocument(String key);
 

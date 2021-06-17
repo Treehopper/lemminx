@@ -15,17 +15,23 @@ package org.eclipse.lemminx.services.extensions;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.eclipse.lemminx.services.IXMLDocumentProvider;
 import org.eclipse.lemminx.services.IXMLNotificationService;
+import org.eclipse.lemminx.services.IXMLValidationService;
 import org.eclipse.lemminx.services.extensions.codelens.ICodeLensParticipant;
+import org.eclipse.lemminx.services.extensions.commands.IXMLCommandService;
 import org.eclipse.lemminx.services.extensions.diagnostics.IDiagnosticsParticipant;
+import org.eclipse.lemminx.services.extensions.format.IFormatterParticipant;
 import org.eclipse.lemminx.services.extensions.save.ISaveContext;
+import org.eclipse.lemminx.services.extensions.save.ISaveContext.SaveContextType;
 import org.eclipse.lemminx.uriresolver.URIResolverExtensionManager;
 import org.eclipse.lsp4j.InitializeParams;
 
@@ -50,18 +56,22 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 	private final List<ICodeLensParticipant> codeLensParticipants;
 	private final List<IHighlightingParticipant> highlightingParticipants;
 	private final List<IRenameParticipant> renameParticipants;
-
+	private final List<IFormatterParticipant> formatterParticipants;
+	private final List<ISymbolsProviderParticipant> symbolsProviderParticipants;
+	private final List<IWorkspaceServiceParticipant> workspaceServiceParticipants;
 	private IXMLDocumentProvider documentProvider;
+	private IXMLValidationService validationService;
+	private IXMLCommandService commandService;
 
 	private InitializeParams params;
 
 	private ISaveContext initialSaveContext;
 
 	private boolean initialized;
-	
+
 	private IXMLNotificationService notificationService;
 
-	private final Map<Class, Object> components;
+	private final Map<Class<?>, Object> components;
 
 	public XMLExtensionsRegistry() {
 		extensions = new ArrayList<>();
@@ -76,6 +86,9 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 		codeLensParticipants = new ArrayList<>();
 		highlightingParticipants = new ArrayList<>();
 		renameParticipants = new ArrayList<>();
+		formatterParticipants = new ArrayList<>();
+		symbolsProviderParticipants = new ArrayList<>();
+		workspaceServiceParticipants = new ArrayList<>();
 		resolverExtensionManager = new URIResolverExtensionManager();
 		components = new HashMap<>();
 		registerComponent(resolverExtensionManager);
@@ -108,7 +121,11 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 	public void doSave(ISaveContext saveContext) {
 		if (initialized) {
 			extensions.stream().forEach(extension -> extension.doSave(saveContext));
-		} else {
+		} else if (this.initialSaveContext == null
+				|| (saveContext != null && saveContext.getType() == SaveContextType.SETTINGS)) {
+			// capture initial configuration iff:
+			// 1. the saveContext is for configuration, not document save
+			// 2. we haven't captured settings before
 			this.initialSaveContext = saveContext;
 		}
 	}
@@ -173,6 +190,25 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 		return renameParticipants;
 	}
 
+	public Collection<IFormatterParticipant> getFormatterParticipants() {
+		initializeIfNeeded();
+		return formatterParticipants;
+	}
+
+	public Collection<ISymbolsProviderParticipant> getSymbolsProviderParticipants() {
+		initializeIfNeeded();
+		return symbolsProviderParticipants;
+	}
+
+	/**
+	 * @return the registered workspace service participants.
+	 * @since 0.14.2
+	 */
+	public Collection<IWorkspaceServiceParticipant> getWorkspaceServiceParticipants() {
+		initializeIfNeeded();
+		return workspaceServiceParticipants;
+	}
+
 	public void initializeIfNeeded() {
 		if (initialized) {
 			return;
@@ -186,11 +222,21 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 			return;
 		}
 
-		ServiceLoader<IXMLExtension> extensions = ServiceLoader.load(IXMLExtension.class);
-		extensions.forEach(extension -> {
-			registerExtension(extension);
-		});
+		if (commandService != null) {
+			commandService.beginCommandsRegistration();
+		}
+		Iterator<IXMLExtension> extensions = ServiceLoader.load(IXMLExtension.class).iterator();
+		while (extensions.hasNext()) {
+			try {
+				registerExtension(extensions.next());
+			} catch (ServiceConfigurationError e) {
+				LOGGER.log(Level.SEVERE, "Error while instantiating extension", e);
+			}
+		}
 		initialized = true;
+		if (commandService != null) {
+			commandService.endCommandsRegistration();
+		}
 	}
 
 	void registerExtension(IXMLExtension extension) {
@@ -312,6 +358,40 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 		renameParticipants.remove(renameParticipant);
 	}
 
+	public void registerFormatterParticipant(IFormatterParticipant formatterParticipant) {
+		formatterParticipants.add(formatterParticipant);
+	}
+
+	public void unregisterFormatterParticipant(IFormatterParticipant formatterParticipant) {
+		formatterParticipants.remove(formatterParticipant);
+	}
+
+	public void registerSymbolsProviderParticipant(ISymbolsProviderParticipant symbolsProviderParticipant) {
+		symbolsProviderParticipants.add(symbolsProviderParticipant);
+	}
+
+	public void unregisterSymbolsProviderParticipant(ISymbolsProviderParticipant symbolsProviderParticipant) {
+		symbolsProviderParticipants.remove(symbolsProviderParticipant);
+	}
+	
+	/**
+	 * Register a new workspace service participant
+	 * @param workspaceServiceParticipant the participant to register
+	 * @since 0.14.2
+	 */
+	public void registerWorkspaceServiceParticipant(IWorkspaceServiceParticipant workspaceServiceParticipant) {
+		workspaceServiceParticipants.add(workspaceServiceParticipant);
+	}
+
+	/**
+	 * Unregister a new workspace service participant.
+	 * @param workspaceServiceParticipant the participant to unregister
+	 * @since 0.14.2
+	 */
+	public void unregisterWorkspaceServiceParticipant(IWorkspaceServiceParticipant workspaceServiceParticipant) {
+		workspaceServiceParticipants.remove(workspaceServiceParticipant);
+	}
+
 	/**
 	 * Returns the XML Document provider and null otherwise.
 	 * 
@@ -333,7 +413,7 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 	public URIResolverExtensionManager getResolverExtensionManager() {
 		return resolverExtensionManager;
 	}
-	
+
 	/**
 	 * Returns the notification service
 	 * 
@@ -350,6 +430,42 @@ public class XMLExtensionsRegistry implements IComponentProvider {
 	 */
 	public void setNotificationService(IXMLNotificationService notificationService) {
 		this.notificationService = notificationService;
+	}
+
+	/**
+	 * Returns the XML document validation service
+	 * 
+	 * @return the validation service
+	 */
+	public IXMLValidationService getValidationService() {
+		return validationService;
+	}
+
+	/**
+	 * Sets the XML document validation service
+	 * 
+	 * @param validationService
+	 */
+	public void setValidationService(IXMLValidationService validationService) {
+		this.validationService = validationService;
+	}
+
+	/**
+	 * Returns the LS command service
+	 * 
+	 * @return the command service
+	 */
+	public IXMLCommandService getCommandService() {
+		return commandService;
+	}
+
+	/**
+	 * Sets the LS command service
+	 * 
+	 * @param commandService
+	 */
+	public void setCommandService(IXMLCommandService commandService) {
+		this.commandService = commandService;
 	}
 
 }

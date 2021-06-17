@@ -15,12 +15,14 @@ package org.eclipse.lemminx.extensions.dtd.participants.diagnostics;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 
 import org.apache.xerces.impl.dtd.XMLDTDLoader;
 import org.apache.xerces.xni.parser.XMLEntityResolver;
 import org.apache.xerces.xni.parser.XMLInputSource;
 import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.extensions.contentmodel.model.ContentModelManager;
 import org.eclipse.lemminx.extensions.contentmodel.participants.diagnostics.LSPErrorReporterForXML;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.jsonrpc.CancelChecker;
@@ -32,11 +34,11 @@ import org.eclipse.lsp4j.jsonrpc.CancelChecker;
 public class DTDValidator {
 
 	public static void doDiagnostics(DOMDocument document, XMLEntityResolver entityResolver,
-			List<Diagnostic> diagnostics, CancelChecker monitor) {
+			List<Diagnostic> diagnostics, ContentModelManager contentModelManager, CancelChecker monitor) {
 		try {
 			XMLDTDLoader loader = new XMLDTDLoader();
 			loader.setProperty("http://apache.org/xml/properties/internal/error-reporter",
-					new LSPErrorReporterForXML(document, diagnostics));
+					new LSPErrorReporterForXML(document, diagnostics, contentModelManager, false, new HashMap<>()));
 
 			if (entityResolver != null) {
 				loader.setEntityResolver(entityResolver);

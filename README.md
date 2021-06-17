@@ -22,7 +22,7 @@ Features
 * [textDocument/rangeFormatting](https://microsoft.github.io/language-server-protocol/specification#textDocument_rangeFormatting)
 * [textDocument/rename](https://microsoft.github.io/language-server-protocol/specification#textDocument_rename).
 
-See screenshots in the [wiki](https://github.com/eclipse/lemminx/wiki/Features).
+See screenshots in the [Features docs](./docs/Features.md).
 
 See the [changelog](CHANGELOG.md) for the latest release.
 
@@ -30,7 +30,7 @@ See the [changelog](CHANGELOG.md) for the latest release.
 Demo
 --------------
 
-![XML Language Server Demo](demos/XMLLanguageServerDemo.gif)
+![XML Language Server Demo](docs/images/XMLLanguageServerDemo.gif)
 
 Get started
 --------------
@@ -60,6 +60,35 @@ const serverConnection = createSocketConnection(socket,
 this.forward(clientConnection, serverConnection)
 socket.connect(socketPort)
 ```
+
+Generating a native binary:
+---------------------------------
+To generate a native binary:
+- [Install GraalVM 20.2.0](https://www.graalvm.org/docs/getting-started/#install-graalvm)
+- In a terminal, run `gu install native-image`
+- Execute a Maven build that sets the flag `native`: `./mvnw clean package -Dnative -DskipTests`
+  - On Linux, compile with `./mvnw clean package -Dnative -DskipTests -Dgraalvm.static=--static`
+    in order to support distributions that don't use `glibc`, such as Alpine Linux
+- It will generate a native binary in `org.eclipse.lemminx/target/lemminx-{os.name}-{architecture}-{version}`
+
+OS specific instructions:
+- __Linux__:
+  - Make sure that you have installed the static versions of the C++ standard library
+    - For instance, on Fedora Linux, install `glibc-static`, `libstdc++-static`, and `zlib-static`
+- __Windows__:
+  - When installing native-image, please note that `gu` is an existing alias in PowerShell.
+  Remove the alias with `Remote-Item alias:gu -Force`, refer to `gu` with the absolute path, or use `gu` under `cmd.exe`.
+  - Make sure to run the Maven wrapper in the "Native Tools Command Prompt".
+  This command prompt can be obtained through installing the Windows SDK or Visual Studio, as
+  mentioned in the [GraalVM installation instructions](https://www.graalvm.org/docs/getting-started-with-graalvm/windows/).
+
+`native-image` Development Instructions:
+- Reflection:
+  - If you need to use reflection to access a private field/method, simply register the field/methods that you access in `reflect-config.json`
+  - If you need to parse some JSON using Gson, make sure to register the fields and methods of the class that you are parsing into in `reflect-config.json`
+    - This needs to be done recursively, for all classes that it has member variables of, including `enum`s
+    - Settings are all deserialized, so whenever a setting is added, make sure to register the classes
+  - Manually test the binary and check the logs for reflection errors/NPEs
 
 Maven coordinates:
 ------------------
@@ -108,6 +137,14 @@ And if you want to consume the SNAPSHOT builds instead:
 </repository>
 ```
 
+Verify 3rd Party Libraries
+----------------------------
+
+_Currently generating the IP Log report requires a Java Runtime Environment (JRE) >= 11._
+
+Run `./mvnw clean verify -Pverify-iplog` to generate a report for the 3rd party libraries used by this project. See the [Eclipse Project Handbook](https://www.eclipse.org/projects/handbook/#ip-license-tool) for further details.
+
+
 Clients
 -------
 
@@ -119,17 +156,9 @@ Here are some clients consuming this XML Language Server:
  * [Spring Tools 4](https://github.com/spring-projects/sts4) - re-using the XML parser for Spring-specific analysis and content-assist
  * Vim/Neovim with [coc-xml](https://github.com/fannheyward/coc-xml)
  * Emacs with [lsp-mode](https://github.com/emacs-lsp/lsp-mode)
- 
- 
+
+
 Extensions
 ----------
 
-The XML Language Server is extensible with plugin kind (with SPI). Additionally to XSD-based validation and assistance, those extensiosn allow to enrich the validation and assistance, typically for specific files or contexts.
-
-Example of extensions include:
-
- * Built-in content model to provide completion, validation, hover based on XML Schema.
- * Built-in completion based on Emmet
- * [See all built-in extensions](https://github.com/eclipse/lemminx/tree/master/org.eclipse.lemminx/src/main/java/org/eclipse/lemminx/extensions)
- * Eclipse [LemMinX Maven extension](https://github.com/eclipse/lemminx-maven/) provides extra assistance for Maven pom files, adding some pom validation (as diagnostics), hover for documentation and properties evaluation, completion for configuration element (not part of XSD), constrained node, file path, GAVs..., go to definition for properties and GAVs...
- * [LemMinX Liquibase extension](https://github.com/Treehopper/liquibase-lsp/) provides extra assistance for Liquibase XML migration scripts, adding database validation (as diagnostics) using an in-memory database.
+The XML Language Server can be extended to provide additional validation and assistance. Read the [LemMinX-Extensions docs](./docs/LemMinX-Extensions.md) for more information

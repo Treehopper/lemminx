@@ -24,13 +24,9 @@ import org.junit.jupiter.api.Test;
  */
 public class InvalidPathWarnerTest extends AbstractNotifierTest {
 
-	private static final String userDir = System.getProperty("user.dir"); // C:..\..\folderName || /bin/.../java
-		
-	private static final String userDirForwardSlash = userDir.replace("\\", "/");
+	private static final String catalog1 = "catalog.xml";
 
-	private static final String catalog1 = userDir + "/src/test/resources/catalogs/catalog.xml";
-
-	private static final String catalog2 = userDir + "/src/test/resources/catalogs/catalog2.xml";
+	private static final String catalog2 = "catalog2.xml";
 
 	private static final PathFeature TEST_FEATURE = PathFeature.CATALOGS;
 	
@@ -53,9 +49,9 @@ public class InvalidPathWarnerTest extends AbstractNotifierTest {
 	public void testSendActionableNotificationWarningText() {
 		setSupportCapabilities(true, true);
 		sendNotification(catalog1);
-		assertMessage("Invalid path for setting 'xml.catalogs': '" + catalog1 + "'");
+		assertLastActionableNotificationMessage("Invalid path for setting 'xml.catalogs': '" + catalog1 + "'");
 		sendNotification(catalog1, catalog2);
-		assertMessage("Invalid paths for setting 'xml.catalogs': '" + catalog1 + "', '" + catalog2 + "'");
+		assertLastActionableNotificationMessage("Invalid paths for setting 'xml.catalogs': '" + catalog1 + "', '" + catalog2 + "'");
 	}
 
 	@Test
@@ -103,25 +99,22 @@ public class InvalidPathWarnerTest extends AbstractNotifierTest {
 
 	@Test
 	public void testSendMessage() {
-		String filePath = userDirForwardSlash + catalog1;
 		setSupportCapabilities(false, false);
-		sendNotification(filePath);
+		sendNotification(catalog1);
 		assertCounts(0, 1);
 	}
 
 	@Test
 	public void testSendMessage2() {
-		String filePath = userDirForwardSlash + catalog1;
 		setSupportCapabilities(true, false);
-		sendNotification(filePath);
+		sendNotification(catalog1);
 		assertCounts(0, 1);
 	}
 
 	@Test
 	public void testSendMessage3() {
-		String filePath = userDirForwardSlash + catalog1;
 		setSupportCapabilities(false, true);
-		sendNotification(filePath);
+		sendNotification(catalog1);
 		assertCounts(0, 1);
 	}
 
@@ -129,9 +122,9 @@ public class InvalidPathWarnerTest extends AbstractNotifierTest {
 	public void testSendMessageWarningText() {
 		setSupportCapabilities(false, false);
 		sendNotification(catalog1);
-		assertMessage("Invalid path for setting 'xml.catalogs': '" + catalog1 + "'");
+		assertLastShowMessage("Invalid path for setting 'xml.catalogs': '" + catalog1 + "'");
 		sendNotification(catalog1, catalog2);
-		assertMessage("Invalid paths for setting 'xml.catalogs': '" + catalog1 + "', '" + catalog2 + "'");
+		assertLastShowMessage("Invalid paths for setting 'xml.catalogs': '" + catalog1 + "', '" + catalog2 + "'");
 	}
 
 	@Test

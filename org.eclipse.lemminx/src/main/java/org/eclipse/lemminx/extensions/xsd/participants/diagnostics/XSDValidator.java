@@ -15,7 +15,6 @@ package org.eclipse.lemminx.extensions.xsd.participants.diagnostics;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CancellationException;
@@ -25,8 +24,6 @@ import java.util.logging.Logger;
 import org.apache.xerces.impl.Constants;
 import org.apache.xerces.impl.XMLErrorReporter;
 import org.apache.xerces.impl.xs.XMLSchemaLoader;
-import org.apache.xerces.impl.xs.opti.SchemaDOMParser;
-import org.apache.xerces.impl.xs.traversers.XSDHandler;
 import org.apache.xerces.parsers.XMLGrammarPreparser;
 import org.apache.xerces.util.XMLGrammarPoolImpl;
 import org.apache.xerces.xni.grammars.XMLGrammarDescription;
@@ -34,6 +31,7 @@ import org.apache.xerces.xni.parser.XMLEntityResolver;
 import org.apache.xerces.xni.parser.XMLInputSource;
 import org.apache.xerces.xni.parser.XMLParseException;
 import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.extensions.xerces.AbstractLSPErrorReporter;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.jsonrpc.CancelChecker;
 
@@ -48,10 +46,10 @@ public class XSDValidator {
 	private static boolean canCustomizeReporter = true;
 
 	public static void doDiagnostics(DOMDocument document, XMLEntityResolver entityResolver,
-			List<Diagnostic> diagnostics, CancelChecker monitor) {
+			List<Diagnostic> diagnostics, boolean isRelatedInformation, CancelChecker monitor) {
 
 		try {
-			XMLErrorReporter reporter = new LSPErrorReporterForXSD(document, diagnostics);
+			XMLErrorReporter reporter = new LSPErrorReporterForXSD(document, diagnostics, isRelatedInformation);
 
 			XMLGrammarPreparser grammarPreparser = new LSPXMLGrammarPreparser();
 			XMLSchemaLoader schemaLoader = createSchemaLoader(reporter);
@@ -99,7 +97,7 @@ public class XSDValidator {
 
 	/**
 	 * Create the XML Schema loader to use to validate the XML Schema.
-	 * 
+	 *
 	 * @param reporter the lsp reporter.
 	 * @return the XML Schema loader to use to validate the XML Schema.
 	 * @throws NoSuchFieldException
@@ -117,18 +115,7 @@ public class XSDValidator {
 		// XML syntax (only XMLErrorHandler is allowed).
 		// To fix this problem, we set the Xerces reporter with Java Reflection.
 		if (canCustomizeReporter) {
-			try {
-				Field f = XMLSchemaLoader.class.getDeclaredField("fSchemaHandler");
-				f.setAccessible(true);
-				XSDHandler handler = (XSDHandler) f.get(schemaLoader);
-
-				Field g = XSDHandler.class.getDeclaredField("fSchemaParser");
-				g.setAccessible(true);
-				SchemaDOMParser domParser = (SchemaDOMParser) g.get(handler);
-				domParser.setProperty("http://apache.org/xml/properties/internal/error-reporter", reporter);
-			} catch (Exception e) {
-				canCustomizeReporter = false;
-			}
+			canCustomizeReporter = AbstractLSPErrorReporter.initializeReporter(schemaLoader, reporter);
 		}
 		return schemaLoader;
 	}

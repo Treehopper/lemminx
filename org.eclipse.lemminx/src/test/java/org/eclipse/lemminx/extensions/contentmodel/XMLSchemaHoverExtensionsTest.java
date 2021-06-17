@@ -13,13 +13,23 @@
 package org.eclipse.lemminx.extensions.contentmodel;
 
 import static org.eclipse.lemminx.XMLAssert.r;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import org.apache.xerces.impl.XMLEntityManager;
 import org.apache.xerces.util.URI.MalformedURIException;
 import org.eclipse.lemminx.XMLAssert;
 import org.eclipse.lemminx.commons.BadLocationException;
+import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.DOMElement;
+import org.eclipse.lemminx.dom.DOMNode;
+import org.eclipse.lemminx.dom.DOMText;
+import org.eclipse.lemminx.dom.LineIndentInfo;
+import org.eclipse.lemminx.extensions.contentmodel.participants.ContentModelHoverParticipant;
 import org.eclipse.lemminx.extensions.xsi.XSISchemaModel;
 import org.eclipse.lemminx.services.XMLLanguageService;
+import org.eclipse.lemminx.services.extensions.IHoverRequest;
+import org.eclipse.lemminx.settings.SharedSettings;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.junit.jupiter.api.Test;
 
@@ -41,7 +51,7 @@ public class XMLSchemaHoverExtensionsTest {
 						System.lineSeparator() + //
 						System.lineSeparator() + "Source: [spring-beans-3.0.xsd](" + schemaURI + ")",
 				r(2, 2, 2, 6));
-	};
+	}
 
 	@Test
 	public void testAttributeNameHover() throws BadLocationException, MalformedURIException {
@@ -55,7 +65,7 @@ public class XMLSchemaHoverExtensionsTest {
 						System.lineSeparator() + //
 						System.lineSeparator() + "Source: [spring-beans-3.0.xsd](" + schemaURI + ")",
 				r(2, 7, 2, 12));
-	};
+	}
 
 	@Test
 	public void testTagHoverFromXSType() throws BadLocationException, MalformedURIException {
@@ -71,7 +81,7 @@ public class XMLSchemaHoverExtensionsTest {
 						System.lineSeparator() + //
 						System.lineSeparator() + "Source: [invoice.xsd](" + schemaURI + ")",
 				r(1, 1, 1, 8));
-	};
+	}
 
 	@Test
 	public void testTagHoverForSchemaLocation() throws BadLocationException {
@@ -80,7 +90,7 @@ public class XMLSchemaHoverExtensionsTest {
 				" xsi:schema|Location=\"http://invoice xsd/invoice.xsd \">\r\n";
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml",
 				XSISchemaModel.SCHEMA_LOCATION_DOC, r(2, 1, 2, 19));
-	};
+	}
 
 	@Test
 	public void testTagHoverForNoNamespaceSchemaLocation() throws BadLocationException {
@@ -89,7 +99,7 @@ public class XMLSchemaHoverExtensionsTest {
 				" xsi:noNamespace|SchemaLocation=\"http://invoice xsd/invoice.xsd \">\r\n";
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml",
 				XSISchemaModel.NO_NAMESPACE_SCHEMA_LOCATION_DOC, r(2, 1, 2, 30));
-	};
+	}
 
 	@Test
 	public void testTagHoverForXSInil() throws BadLocationException {
@@ -98,7 +108,7 @@ public class XMLSchemaHoverExtensionsTest {
 				" xsi:n|il=\"http://invoice xsd/invoice.xsd \">\r\n";
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml",
 				XSISchemaModel.NIL_DOC, r(2, 1, 2, 8));
-	};
+	}
 
 	@Test
 	public void testTagHoverForXSIType() throws BadLocationException {
@@ -107,7 +117,7 @@ public class XMLSchemaHoverExtensionsTest {
 				" xsi:ty|pe=\"http://invoice xsd/invoice.xsd \">\r\n";
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml",
 				XSISchemaModel.TYPE_DOC, r(2, 1, 2, 9));
-	};
+	}
 
 	@Test
 	public void testTagHoverForXSIType2() throws BadLocationException {
@@ -116,7 +126,7 @@ public class XMLSchemaHoverExtensionsTest {
 				" x|si:type=\"http://invoice xsd/invoice.xsd \">\r\n";
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml",
 				XSISchemaModel.TYPE_DOC, r(2, 1, 2, 9));
-	};
+	}
 
 	@Test
 	public void testTagHoverForXSIBadPrefix() throws BadLocationException {
@@ -125,7 +135,7 @@ public class XMLSchemaHoverExtensionsTest {
 				" BAD:t|ype=\"http://invoice xsd/invoice.xsd \">\r\n";
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml", null,
 				r(3, 2, 3, 6));
-	};
+	}
 
 	@Test
 	public void testTagHoverForXSITypeNotRoot() throws BadLocationException {
@@ -135,7 +145,7 @@ public class XMLSchemaHoverExtensionsTest {
 				"<a xsi:ty|pe=\"\"></a>";
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml",
 				XSISchemaModel.TYPE_DOC, r(3, 3, 3, 11));
-	};
+	}
 
 	@Test
 	public void testTagHoverForXSINILNotRoot() throws BadLocationException {
@@ -146,7 +156,7 @@ public class XMLSchemaHoverExtensionsTest {
 
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml",
 				XSISchemaModel.NIL_DOC, r(3, 3, 3, 10));
-	};
+	}
 
 	@Test
 	public void testTagHoverForXSISchemaNotRoot() throws BadLocationException {
@@ -157,7 +167,7 @@ public class XMLSchemaHoverExtensionsTest {
 
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/invoice.xml", null,
 				r(3, 2, 3, 6));
-	};
+	}
 
 	@Test
 	public void testHoverAttributeValueEuro() throws BadLocationException, MalformedURIException {
@@ -169,7 +179,7 @@ public class XMLSchemaHoverExtensionsTest {
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/money.xml", "Euro Hover" + //
 				System.lineSeparator() + //
 				System.lineSeparator() + "Source: [money.xsd](" + schemaURI + ")", r(1, 37, 1, 44));
-	};
+	}
 
 	@Test
 	public void testHoverAttributeValuePound() throws BadLocationException, MalformedURIException {
@@ -181,7 +191,7 @@ public class XMLSchemaHoverExtensionsTest {
 		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/money.xml", "Pound Hover" + //
 				System.lineSeparator() + //
 				System.lineSeparator() + "Source: [money.xsd](" + schemaURI + ")", r(1, 37, 1, 45));
-	};
+	}
 
 	@Test
 	public void testHoverAttributeValueNonExistent() throws BadLocationException, MalformedURIException {
@@ -195,11 +205,11 @@ public class XMLSchemaHoverExtensionsTest {
 						System.lineSeparator() + //
 						System.lineSeparator() + "Source: [money.xsd](" + schemaURI + ")",
 				r(1, 28, 1, 36));
-	};
+	}
 
 	/**
 	 * See https://github.com/redhat-developer/vscode-xml/issues/233
-	 * 
+	 *
 	 * @throws BadLocationException
 	 * @throws MalformedURIException
 	 */
@@ -225,6 +235,158 @@ public class XMLSchemaHoverExtensionsTest {
 				System.lineSeparator() + //
 				System.lineSeparator() + "Source: [money.xsd](" + schemaURI + ")", r(1, 37, 1, 45));
 
+	}
+
+	@Test
+	public void hoverAttributeValueWithUnion() throws BadLocationException, MalformedURIException {
+		String schemaURI = getXMLSchemaFileURI("dressSize.xsd");
+		String xml = "<dress\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:noNamespaceSchemaLocation=\"xsd/dressSize.xsd\"\r\n" + //
+				"	size=\"sma|ll\" />";
+		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/dress.xml", //
+				"Small documentation" + //
+						System.lineSeparator() + //
+						System.lineSeparator() + //
+						"Source: [dressSize.xsd](" + schemaURI + ")",
+				r(3, 6, 3, 13));
+	}
+
+	@Test
+	public void hoverAttributeValueWithUnion2() throws BadLocationException, MalformedURIException {
+		String schemaURI = getXMLSchemaFileURI("dressSize.xsd");
+		String xml = "<dress\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:noNamespaceSchemaLocation=\"xsd/dressSize.xsd\"\r\n" + //
+				"	size=\"lar|ge\" />";
+		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/dress.xml", //
+				"Size Type documentation" + //
+						System.lineSeparator() + //
+						System.lineSeparator() + //
+						"Source: [dressSize.xsd](" + schemaURI + ")",
+				r(3, 6, 3, 13));
+	}
+
+	@Test
+	public void hoverTextWithUnion() throws BadLocationException, MalformedURIException {
+		String schemaURI = getXMLSchemaFileURI("dressSize.xsd");
+		String xml = "<dresssize\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:noNamespaceSchemaLocation=\"xsd/dressSize.xsd\" >\r\n" + //
+				"	sma|ll " + //
+				"</dresssize>";
+		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/dress.xml", //
+				"Small documentation" + //
+						System.lineSeparator() + //
+						System.lineSeparator() + //
+						"Source: [dressSize.xsd](" + schemaURI + ")",
+				r(2, 52, 3, 7));
+	}
+
+	@Test
+	public void hoverTextWithUnion2() throws BadLocationException, MalformedURIException {
+		String schemaURI = getXMLSchemaFileURI("dressSize.xsd");
+		String xml = "<dresssize\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:noNamespaceSchemaLocation=\"xsd/dressSize.xsd\" >\r\n" + //
+				"	lar|ge " + //
+				"</dresssize>";
+		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/dress.xml", //
+				"Size Type documentation" + //
+						System.lineSeparator() + //
+						System.lineSeparator() + //
+						"Source: [dressSize.xsd](" + schemaURI + ")",
+				r(2, 52, 3, 7));
+	}
+
+	@Test
+	public void hoverTextWithUnion3() throws BadLocationException, MalformedURIException {
+		String schemaURI = getXMLSchemaFileURI("dressSize.xsd");
+		String xml = "<dresssize\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:noNamespaceSchemaLocation=\"xsd/dressSize.xsd\" >\r\n" + //
+				"	x-lar|ge " + //
+				"</dresssize>";
+		XMLAssert.assertHover(new XMLLanguageService(), xml, null, "src/test/resources/dress.xml", //
+				"Size Type documentation" + //
+						System.lineSeparator() + //
+						System.lineSeparator() + //
+						"Source: [dressSize.xsd](" + schemaURI + ")",
+				r(2, 52, 3, 9));
+	}
+
+	@Test
+	public void hoverWithNullParentNode() throws Exception {
+		ContentModelHoverParticipant hoverParticipant = new ContentModelHoverParticipant();
+		IHoverRequest hoverRequest = new IHoverRequest() {
+
+			@Override
+			public DOMNode getNode() {
+				return new DOMText(0, 0);
+			}
+
+			@Override
+			public int getOffset() {
+				return 0;
+			}
+
+			@Override
+			public Position getPosition() {
+				return null;
+			}
+
+			@Override
+			public DOMElement getParentElement() {
+				return null;
+			}
+
+			@Override
+			public DOMDocument getXMLDocument() {
+				return null;
+			}
+
+			@Override
+			public String getCurrentTag() {
+				return null;
+			}
+
+			@Override
+			public String getCurrentAttributeName() {
+				return null;
+			}
+
+			@Override
+			public LineIndentInfo getLineIndentInfo() throws BadLocationException {
+				return null;
+			}
+
+			@Override
+			public <T> T getComponent(Class clazz) {
+				return null;
+			}
+
+			@Override
+			public boolean canSupportMarkupKind(String kind) {
+				return false;
+			}
+
+			@Override
+			public SharedSettings getSharedSettings() {
+				return null;
+			}
+
+			@Override
+			public Range getHoverRange() {
+				return null;
+			}
+
+			@Override
+			public boolean isOpen() {
+				return false;
+			}
+
+		};
+		assertNull(hoverParticipant.onText(hoverRequest));
 	}
 
 	private static void assertHover(String value, String expectedHoverLabel, Range expectedHoverRange)

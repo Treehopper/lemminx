@@ -17,7 +17,7 @@ import org.eclipse.lsp4j.FormattingOptions;
 /**
  * This class is the root of all formatting settings. It is necessary to update
  * this class for any new additions.
- * 
+ *
  * All defaults should be set here to eventually be overridden if needed.
  */
 public class XMLFormattingOptions extends FormattingOptions {
@@ -28,6 +28,7 @@ public class XMLFormattingOptions extends FormattingOptions {
 	public static final EnforceQuoteStyle DEFAULT_ENFORCE_QUOTE_STYLE = EnforceQuoteStyle.ignore;
 	public static final boolean DEFAULT_PRESERVE_ATTR_LINE_BREAKS = false;
 	public static final boolean DEFAULT_TRIM_TRAILING_SPACES = false;
+	public static final int DEFAULT_SPLIT_ATTRIBUTES_INDENT_SIZE = 2;
 
 	// All possible keys
 	private static final String SPLIT_ATTRIBUTES = "splitAttributes";
@@ -42,57 +43,53 @@ public class XMLFormattingOptions extends FormattingOptions {
 	private static final String TRIM_TRAILING_WHITESPACE = "trimTrailingWhitespace";
 	private static final String ENFORCE_QUOTE_STYLE = "enforceQuoteStyle";
 	private static final String PRESERVE_ATTR_LINE_BREAKS = "preserveAttributeLineBreaks";
-
-	enum Quotations {
-		doubleQuotes, singleQuotes
-	}
-
 	private static final String PRESERVE_EMPTY_CONTENT = "preserveEmptyContent";
+	private static final String SPLIT_ATTRIBUTES_INDENT_SIZE = "splitAttributesIndentSize";
 
 	/**
 	 * Options for formatting empty elements.
-	 * 
+	 *
 	 * <ul>
 	 * <li>{@link #expand} : expand empty elements. With this option the following
 	 * XML:
-	 * 
+	 *
 	 * <pre>
 	 * {@code
 	 * <example />
 	 * }
 	 * </pre>
-	 * 
+	 *
 	 * will be formatted to :
-	 * 
+	 *
 	 * <pre>
 	 * {@code
 	 * <example><example>
 	 * }
 	 * </pre>
-	 * 
+	 *
 	 * </li>
 	 * <li>{@link #collapse} : collapse empty elements. With this option the
 	 * following XML:
-	 * 
+	 *
 	 * <pre>
 	 * {@code
 	 * <example></example>
 	 * }
 	 * </pre>
-	 * 
+	 *
 	 * will be formatted to :
-	 * 
+	 *
 	 * <pre>
 	 * {@code
 	 * <example />
 	 * }
 	 * </pre>
-	 * 
+	 *
 	 * </li>
 	 * <li>{@link #ignore} : keeps the original XML content for empty elements.
 	 * </li>
 	 * </ul>
-	 * 
+	 *
 	 */
 	public static enum EmptyElements {
 		expand, collapse, ignore;
@@ -130,6 +127,7 @@ public class XMLFormattingOptions extends FormattingOptions {
 		this.setPreserveEmptyContent(false);
 		this.setPreservedNewlines(DEFAULT_PRESERVER_NEW_LINES);
 		this.setEmptyElement(EmptyElements.ignore);
+		this.setSplitAttributesIndentSize(DEFAULT_SPLIT_ATTRIBUTES_INDENT_SIZE);
 	}
 
 	public XMLFormattingOptions(int tabSize, boolean insertSpaces, boolean initializeDefaultSettings) {
@@ -289,7 +287,7 @@ public class XMLFormattingOptions extends FormattingOptions {
 
 	/**
 	 * Returns the value of trimFinalNewlines.
-	 * 
+	 *
 	 * If the trimFinalNewlines does not exist, defaults to true.
 	 */
 	@Override
@@ -314,13 +312,13 @@ public class XMLFormattingOptions extends FormattingOptions {
 	public EnforceQuoteStyle getEnforceQuoteStyle() {
 		String value = this.getString(XMLFormattingOptions.ENFORCE_QUOTE_STYLE);
 		EnforceQuoteStyle enforceStyle = null;
-		
+
 		try {
 			enforceStyle = value == null ? null : EnforceQuoteStyle.valueOf(value);
 		} catch (IllegalArgumentException e) {
 			return DEFAULT_ENFORCE_QUOTE_STYLE;
 		}
-		
+
 		return enforceStyle == null ? DEFAULT_ENFORCE_QUOTE_STYLE : enforceStyle;
 	}
 
@@ -333,7 +331,7 @@ public class XMLFormattingOptions extends FormattingOptions {
 
 	/**
 	 * Returns the value of preserveAttrLineBreaks
-	 * 
+	 *
 	 * @return the value of preserveAttrLineBreaks
 	 */
 	public boolean isPreserveAttrLineBreaks() {
@@ -348,6 +346,25 @@ public class XMLFormattingOptions extends FormattingOptions {
 		} else {
 			return XMLFormattingOptions.DEFAULT_PRESERVE_ATTR_LINE_BREAKS;
 		}
+	}
+
+	/**
+	 * Sets the value of splitAttributesIndentSize
+	 *
+	 * @param splitAttributesIndentSize the new value for splitAttributesIndentSize
+	 */
+	public void setSplitAttributesIndentSize(int splitAttributesIndentSize) {
+		this.putNumber(SPLIT_ATTRIBUTES_INDENT_SIZE, Integer.valueOf(splitAttributesIndentSize));
+	}
+
+	/**
+	 * Returns the value of splitAttributesIndentSize or zero if it was set to a negative value
+	 *
+	 * @return the value of splitAttributesIndentSize or zero if it was set to a negative value
+	 */
+	public int getSplitAttributesIndentSize() {
+		int splitAttributesIndentSize = getNumber(SPLIT_ATTRIBUTES_INDENT_SIZE).intValue();
+		return splitAttributesIndentSize < 0 ? 0 : splitAttributesIndentSize;
 	}
 
 	public XMLFormattingOptions merge(FormattingOptions formattingOptions) {

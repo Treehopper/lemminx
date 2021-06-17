@@ -12,18 +12,31 @@
  */
 package org.eclipse.lemminx.extensions.contentmodel;
 
-import static org.eclipse.lemminx.XMLAssert.d;
+import static org.eclipse.lemminx.XMLAssert.l;
+import static org.eclipse.lemminx.XMLAssert.r;
 import static org.eclipse.lemminx.XMLAssert.ca;
+import static org.eclipse.lemminx.XMLAssert.d;
 import static org.eclipse.lemminx.XMLAssert.te;
 import static org.eclipse.lemminx.XMLAssert.testCodeActionsFor;
 
+import java.util.ArrayList;
+import java.util.Locale;
+
+import org.apache.xerces.impl.XMLEntityManager;
+import org.apache.xerces.util.URI.MalformedURIException;
 import org.eclipse.lemminx.XMLAssert;
 import org.eclipse.lemminx.extensions.contentmodel.participants.DTDErrorCode;
 import org.eclipse.lemminx.extensions.contentmodel.participants.XMLSyntaxErrorCode;
+import org.eclipse.lemminx.extensions.contentmodel.settings.ContentModelSettings;
+import org.eclipse.lemminx.extensions.contentmodel.settings.XMLValidationSettings;
+import org.eclipse.lemminx.services.XMLLanguageService;
 import org.eclipse.lemminx.settings.EnforceQuoteStyle;
 import org.eclipse.lemminx.settings.QuoteStyle;
 import org.eclipse.lemminx.settings.SharedSettings;
 import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticRelatedInformation;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.PublishDiagnosticsCapabilities;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -43,6 +56,24 @@ public class DTDDiagnosticsTest {
 				"	<XXX></XXX>\r\n" + //
 				"</web-app>";
 		testDiagnosticsFor(xml, d(6, 2, 5, DTDErrorCode.MSG_ELEMENT_NOT_DECLARED),
+				d(5, 1, 8, DTDErrorCode.MSG_CONTENT_INVALID));
+	}
+
+	@Test
+	public void MSG_ELEMENT_NOT_DECLARED_Public() throws Exception {
+		// This test uses the local DTD with catalog-public.xml by using the PUBLIC ID
+		// -//Sun Microsystems, Inc.//DTD Web Application 2.3//EN
+		// <public publicId="-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN"
+		// uri="../dtd/web-app_2_3.dtd" />
+		String xml = "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?> \r\n" + //
+				"<!DOCTYPE web-app\r\n" + //
+				"   PUBLIC \"-//Sun Microsystems, Inc.//DTD Web Application 2.3//EN\"\r\n" + //
+				"   \"ABCD.dtd\">\r\n" + //
+				"\r\n" + //
+				"<web-app>\r\n" + //
+				"	<XXX></XXX>\r\n" + //
+				"</web-app>";
+		testPublicDiagnosticsFor(xml, d(6, 2, 5, DTDErrorCode.MSG_ELEMENT_NOT_DECLARED),
 				d(5, 1, 8, DTDErrorCode.MSG_CONTENT_INVALID));
 	}
 
@@ -296,7 +327,8 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\r\n" + //
 				"</article>";
 
-		Diagnostic d = d(5, 1, 5, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(5, 1, 5, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 		testCodeActionsFor(xml, d, ca(d, te(2, 29, 2, 29, "\r\n\t<!ENTITY nbsp \"entity-value\">")));
 	}
@@ -311,7 +343,8 @@ public class DTDDiagnosticsTest {
 				"	&a;\r\n" + //
 				"</article>";
 
-		Diagnostic d = d(5, 1, 5, 4, DTDErrorCode.EntityNotDeclared, "The entity \"a\" was referenced, but not declared.");
+		Diagnostic d = d(5, 1, 5, 4, DTDErrorCode.EntityNotDeclared,
+				"The entity \"a\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 		testCodeActionsFor(xml, d, ca(d, te(2, 29, 2, 29, "\r\n\t<!ENTITY a \"entity-value\">")));
 	}
@@ -322,12 +355,12 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\r\n" + //
 				"</article>";
 
-		Diagnostic d = d(1, 1, 1, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(1, 1, 1, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d, ca(d, te(0, 0, 0, 0, "<!DOCTYPE article [\r\n" +
-				"\t<!ENTITY nbsp \"entity-value\">\r\n" +
-				"]>\r\n")));
+		testCodeActionsFor(xml, d,
+				ca(d, te(0, 0, 0, 0, "<!DOCTYPE article [\r\n" + "\t<!ENTITY nbsp \"entity-value\">\r\n" + "]>\r\n")));
 	}
 
 	@Test
@@ -337,28 +370,25 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\r\n" + //
 				"</article>";
 
-		Diagnostic d = d(2, 1, 2, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(2, 1, 2, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d, ca(d, te(0, 38, 0, 38, "\r\n<!DOCTYPE article [\r\n" +
-				"\t<!ENTITY nbsp \"entity-value\">\r\n" +
-				"]>")));
+		testCodeActionsFor(xml, d, ca(d,
+				te(0, 38, 0, 38, "\r\n<!DOCTYPE article [\r\n" + "\t<!ENTITY nbsp \"entity-value\">\r\n" + "]>")));
 	}
 
 	@Test
 	public void EntityNotDeclaredWithPrologWithRootSameLine() throws Exception {
-		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><text1>\n" +
-				"<text2>\n" +
-				"\t&c;\n" +
-				"</text2>\n" +
-				"</text1>";
+		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><text1>\n" + "<text2>\n" + "\t&c;\n" + "</text2>\n"
+				+ "</text1>";
 
-		Diagnostic d = d(2, 1, 2, 4, DTDErrorCode.EntityNotDeclared, "The entity \"c\" was referenced, but not declared.");
+		Diagnostic d = d(2, 1, 2, 4, DTDErrorCode.EntityNotDeclared,
+				"The entity \"c\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d, ca(d, te(0, 38, 0, 38, "\n<!DOCTYPE text1 [\n" +
-				"\t<!ENTITY c \"entity-value\">\n" +
-				"]>\n")));
+		testCodeActionsFor(xml, d,
+				ca(d, te(0, 38, 0, 38, "\n<!DOCTYPE text1 [\n" + "\t<!ENTITY c \"entity-value\">\n" + "]>\n")));
 	}
 
 	@Test
@@ -369,11 +399,11 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\n" + //
 				"</article>";
 
-		Diagnostic d = d(3, 1, 3, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(3, 1, 3, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d,
-				ca(d, te(1, 18, 1, 18, "[\n\t<!ENTITY nbsp \"entity-value\">\n]")));
+		testCodeActionsFor(xml, d, ca(d, te(1, 18, 1, 18, "[\n\t<!ENTITY nbsp \"entity-value\">\n]")));
 	}
 
 	@Test
@@ -384,11 +414,11 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\n" + //
 				"</article>";
 
-		Diagnostic d = d(3, 1, 3, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(3, 1, 3, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d,
-				ca(d, te(1, 17, 1, 17, " [\n\t<!ENTITY nbsp \"entity-value\">\n]")));
+		testCodeActionsFor(xml, d, ca(d, te(1, 17, 1, 17, " [\n\t<!ENTITY nbsp \"entity-value\">\n]")));
 	}
 
 	@Test
@@ -400,11 +430,33 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\n" + //
 				"</article>";
 
-		Diagnostic d = d(4, 1, 4, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(4, 1, 4, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d,
-				ca(d, te(2, 0, 2, 0, "[\n\t<!ENTITY nbsp \"entity-value\">\n]")));
+		testCodeActionsFor(xml, d, ca(d, te(2, 0, 2, 0, "[\n\t<!ENTITY nbsp \"entity-value\">\n]")));
+	}
+
+	@Test
+	public void Issue862() throws Exception {
+		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + //
+				"<!DOCTYPE article\n" + //
+				">\n" + //
+				"<article>\n" + //
+				"	&nbsp;\n" + //
+				"</article>";
+
+		Diagnostic d = d(4, 1, 4, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
+		XMLAssert.testDiagnosticsFor(xml, d);
+
+		xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + //
+				"<!DOCTYPE article\n" + //
+				">\n" + //
+				"<article>\n" + //
+				"	&|nbsp;\n" + // set the range
+				"</article>";
+		testCodeActionsFor(xml, d, ca(d, te(2, 0, 2, 0, "[\n\t<!ENTITY nbsp \"entity-value\">\n]")));
 	}
 
 	@Test
@@ -415,11 +467,11 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\n" + //
 				"</article>";
 
-		Diagnostic d = d(3, 1, 3, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(3, 1, 3, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d,
-				ca(d, te(1, 19, 1, 19, "\n\t<!ENTITY nbsp \"entity-value\">\n")));
+		testCodeActionsFor(xml, d, ca(d, te(1, 19, 1, 19, "\n\t<!ENTITY nbsp \"entity-value\">\n")));
 	}
 
 	@Test
@@ -431,11 +483,11 @@ public class DTDDiagnosticsTest {
 				"	&nbsp;\n" + //
 				"</article>";
 
-		Diagnostic d = d(4, 1, 4, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(4, 1, 4, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 
-		testCodeActionsFor(xml, d,
-				ca(d, te(2, 0, 2, 0, "\t<!ENTITY nbsp \"entity-value\">\n")));
+		testCodeActionsFor(xml, d, ca(d, te(2, 0, 2, 0, "\t<!ENTITY nbsp \"entity-value\">\n")));
 	}
 
 	@Test
@@ -451,7 +503,8 @@ public class DTDDiagnosticsTest {
 		settings.getPreferences().setQuoteStyle(QuoteStyle.singleQuotes);
 		settings.getFormattingSettings().setEnforceQuoteStyle(EnforceQuoteStyle.preferred);
 		settings.getFormattingSettings().setInsertSpaces(false);
-		Diagnostic d = d(5, 1, 5, 7, DTDErrorCode.EntityNotDeclared, "The entity \"nbsp\" was referenced, but not declared.");
+		Diagnostic d = d(5, 1, 5, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
 		XMLAssert.testDiagnosticsFor(xml, d);
 		testCodeActionsFor(xml, d, settings, ca(d, te(2, 29, 2, 29, "\r\n\t<!ENTITY nbsp \'entity-value\'>")));
 	}
@@ -468,10 +521,55 @@ public class DTDDiagnosticsTest {
 
 	@Test
 	public void EntityNotDeclared() throws Exception {
-		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n" + "<!DOCTYPE article [\r\n"
-				+ "	<!ELEMENT article (#PCDATA)>\r\n" + "]>\r\n" + "<article>\r\n" + "	&nbsp;\r\n" + "</article>";
+		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n" + //
+				"<!DOCTYPE article [\r\n" + //
+				"	<!ELEMENT article (#PCDATA)>\r\n" + //
+				"]>\r\n" + //
+				"<article>\r\n" + //
+				"	&nbsp;\r\n" + //
+				"</article>";
 
 		XMLAssert.testDiagnosticsFor(xml, d(5, 1, 7, DTDErrorCode.EntityNotDeclared));
+	}
+
+	@Test
+	public void EntityNotDeclaredRespectsIndentSettings1() throws Exception {
+		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n" + //
+				"<!DOCTYPE article [\r\n" + //
+				"	<!ELEMENT article (#PCDATA)>\r\n" + //
+				"]>\r\n" + //
+				"<article>\r\n" + //
+				"	&nbsp;\r\n" + //
+				"</article>";
+		SharedSettings settings = new SharedSettings();
+		settings.getPreferences().setQuoteStyle(QuoteStyle.singleQuotes);
+		settings.getFormattingSettings().setEnforceQuoteStyle(EnforceQuoteStyle.preferred);
+		settings.getFormattingSettings().setInsertSpaces(true);
+		settings.getFormattingSettings().setTabSize(6);
+		Diagnostic d = d(5, 1, 5, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
+		XMLAssert.testDiagnosticsFor(xml, d);
+		testCodeActionsFor(xml, d, settings, ca(d, te(2, 29, 2, 29, "\r\n      <!ENTITY nbsp \'entity-value\'>")));
+	}
+
+	@Test
+	public void EntityNotDeclaredRespectsIndentSettings2() throws Exception {
+		String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n" + //
+				"<!DOCTYPE article [\r\n" + //
+				"	<!ELEMENT article (#PCDATA)>\r\n" + //
+				"]>\r\n" + //
+				"<article>\r\n" + //
+				"	&nbsp;\r\n" + //
+				"</article>";
+		SharedSettings settings = new SharedSettings();
+		settings.getPreferences().setQuoteStyle(QuoteStyle.singleQuotes);
+		settings.getFormattingSettings().setEnforceQuoteStyle(EnforceQuoteStyle.preferred);
+		settings.getFormattingSettings().setInsertSpaces(true);
+		settings.getFormattingSettings().setTabSize(3);
+		Diagnostic d = d(5, 1, 5, 7, DTDErrorCode.EntityNotDeclared,
+				"The entity \"nbsp\" was referenced, but not declared.");
+		XMLAssert.testDiagnosticsFor(xml, d);
+		testCodeActionsFor(xml, d, settings, ca(d, te(2, 29, 2, 29, "\r\n   <!ENTITY nbsp \'entity-value\'>")));
 	}
 
 	@Test
@@ -534,10 +632,10 @@ public class DTDDiagnosticsTest {
 				"   <Term>36</Term>\r\n" + //
 				"   \r\n" + //
 				"</inEQUAL_PMT>";
-		XMLAssert.testDiagnosticsFor(xml, d(1, 29, 1, 46, DTDErrorCode.dtd_not_found),// [1]
+		XMLAssert.testDiagnosticsFor(xml, d(1, 29, 1, 46, DTDErrorCode.dtd_not_found), // [1]
 				d(2, 1, 12, DTDErrorCode.MSG_ELEMENT_NOT_DECLARED), // [2]
 				d(5, 4, 12, DTDErrorCode.MSG_ELEMENT_NOT_DECLARED), // [3]
-				d(5, 23, 5, 30, XMLSyntaxErrorCode.ETagRequired)); // [4]
+				d(5, 4, 12, XMLSyntaxErrorCode.ETagRequired)); // [4]
 	}
 
 	@Test
@@ -554,11 +652,213 @@ public class DTDDiagnosticsTest {
 		XMLAssert.testDiagnosticsFor(xml, d(1, 33, 1, 50, DTDErrorCode.dtd_not_found), // [1]
 				d(2, 1, 12, DTDErrorCode.MSG_ELEMENT_NOT_DECLARED), // [2]
 				d(5, 4, 12, DTDErrorCode.MSG_ELEMENT_NOT_DECLARED), // [3]
-				d(5, 23, 5, 30, XMLSyntaxErrorCode.ETagRequired)); // [4]
+				d(5, 4, 12, XMLSyntaxErrorCode.ETagRequired)); // [4]
+	}
+
+	@Test
+	public void MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ELEMENTDECL() throws Exception {
+		String xml;
+
+		xml = "<!DOCTYPE asdf [\n" + //
+				"  <!ELEMENTasdf (#PCDATA)>\n" + //
+				"]>";
+		testDiagnosticsFor(xml, d(1, 4, 11, DTDErrorCode.MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ELEMENTDECL));
+
+		xml = "<!ELEMENTasdf (#PCDATA)>";
+		testDiagnosticsFor(xml, "test.dtd",
+				d(0, 2, 9, DTDErrorCode.MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ELEMENTDECL));
+
+		xml = "<!ELEMENTasdf";
+		testDiagnosticsFor(xml, "test.dtd",
+				d(0, 2, 9, DTDErrorCode.MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ELEMENTDECL));
+
+		xml = "<!DOCTYPE asdf [\n" + //
+				"  <!ELEMENTasdf\n" + //
+				"]>";
+		Diagnostic diagnostic = d(1, 4, 11, DTDErrorCode.MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ELEMENTDECL);
+		testDiagnosticsFor(xml, diagnostic);
+		testCodeActionsFor(xml, diagnostic, ca(diagnostic, te(1, 11, 1, 11, " ")));
+	}
+
+	@Test
+	public void MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ATTLISTDECL() throws Exception {
+		String xml = "<!DOCTYPE asdf [\n" + //
+				"  <!ATTLISTasdf\n" + //
+				"]>";
+		Diagnostic diagnostic = d(1, 4, 11, DTDErrorCode.MSG_SPACE_REQUIRED_BEFORE_ELEMENT_TYPE_IN_ATTLISTDECL);
+		testDiagnosticsFor(xml, diagnostic);
+		testCodeActionsFor(xml, diagnostic, ca(diagnostic, te(1, 11, 1, 11, " ")));
+	}
+
+	@Test
+	public void MSG_SPACE_REQUIRED_BEFORE_ENTITY_NAME_IN_ENTITYDECL() throws Exception {
+		String xml = "<!DOCTYPE asdf [\n" + //
+				"  <!ENTITYasdf\n" + //
+				"]>";
+		Diagnostic diagnostic = d(1, 4, 10, DTDErrorCode.MSG_SPACE_REQUIRED_BEFORE_ENTITY_NAME_IN_ENTITYDECL);
+		testDiagnosticsFor(xml, diagnostic);
+		testCodeActionsFor(xml, diagnostic, ca(diagnostic, te(1, 10, 1, 10, " ")));
+	}
+
+	@Test
+	public void diagnosticRelatedInformationWithDOCTYPE() throws Exception {
+		ContentModelSettings settings = new ContentModelSettings();
+		settings.setUseCache(true);
+		XMLValidationSettings validationSettings = new XMLValidationSettings();
+		validationSettings.setCapabilities(new PublishDiagnosticsCapabilities(true)); // with related information
+		settings.setValidation(validationSettings);
+
+		String xml = "<!DOCTYPE foo SYSTEM \"dtd/foo-invalid.dtd\">\r\n" + //
+				"<foo>\r\n" + //
+				"   <bar></bar\r\n" + //
+				"</foo>";
+		Diagnostic diagnostic = new Diagnostic(r(0, 21, 0, 42), "There is '1' error in 'foo-invalid.dtd'.",
+				DiagnosticSeverity.Error, "xml");
+		diagnostic.setRelatedInformation(new ArrayList<>());
+		String dtdFileURI = getGrammarFileURI("foo-invalid.dtd");
+		diagnostic.getRelatedInformation().add(new DiagnosticRelatedInformation(l(dtdFileURI, r(0, 14, 0, 18)), ""));
+
+		Diagnostic diagnosticBasedOnDTD = new Diagnostic(r(2, 10, 2, 13),
+				"The end-tag for element type \"bar\" must end with a '>' delimiter.", DiagnosticSeverity.Error, "xml",
+				XMLSyntaxErrorCode.ETagUnterminated.getCode());
+
+		XMLLanguageService xmlLanguageService = new XMLLanguageService();
+		// First validation
+		XMLAssert.testDiagnosticsFor(xmlLanguageService, xml, null, null, "src/test/resources/test.xml", false,
+				settings, //
+				diagnostic, diagnosticBasedOnDTD);
+		// Restart the validation to check the validation is working since Xerces cache
+		// the invalid DTD grammar
+		XMLAssert.testDiagnosticsFor(xmlLanguageService, xml, null, null, "src/test/resources/test.xml", false,
+				settings, //
+				diagnostic, diagnosticBasedOnDTD);
+	}
+
+	@Test
+	public void diagnosticRelatedInformationWithXMLModel() throws Exception {
+		ContentModelSettings settings = new ContentModelSettings();
+		settings.setUseCache(true);
+		XMLValidationSettings validationSettings = new XMLValidationSettings();
+		validationSettings.setCapabilities(new PublishDiagnosticsCapabilities(true)); // with related information
+		settings.setValidation(validationSettings);
+
+		String xml = "<?xml-model href=\"dtd/foo-invalid.dtd\" type=\"application/xml-dtd\"?>\r\n" + //
+				"<foo>\r\n" + //
+				"   <bar></bar\r\n" + //
+				"</foo>";
+		Diagnostic diagnostic = new Diagnostic(r(0, 17, 0, 38), "There is '1' error in 'foo-invalid.dtd'.",
+				DiagnosticSeverity.Error, "xml");
+		diagnostic.setRelatedInformation(new ArrayList<>());
+		String dtdFileURI = getGrammarFileURI("foo-invalid.dtd");
+		diagnostic.getRelatedInformation().add(new DiagnosticRelatedInformation(l(dtdFileURI, r(0, 14, 0, 18)), ""));
+
+		Diagnostic diagnosticBasedOnDTD = new Diagnostic(r(2, 10, 2, 13),
+				"The end-tag for element type \"bar\" must end with a '>' delimiter.", DiagnosticSeverity.Error, "xml",
+				XMLSyntaxErrorCode.ETagUnterminated.getCode());
+
+		XMLLanguageService xmlLanguageService = new XMLLanguageService();
+		// First validation
+		XMLAssert.testDiagnosticsFor(xmlLanguageService, xml, null, null, "src/test/resources/test.xml", false,
+				settings, //
+				diagnostic, diagnosticBasedOnDTD);
+		// Restart the validation to check the validation is working since Xerces cache
+		// the invalid DTD grammar
+		XMLAssert.testDiagnosticsFor(xmlLanguageService, xml, null, null, "src/test/resources/test.xml", false,
+				settings, //
+				diagnostic, diagnosticBasedOnDTD);
+	}
+
+	@Test
+	public void defaultEntityExpansionLimit() {
+		ContentModelSettings settings = new ContentModelSettings();
+		settings.setUseCache(true);
+		XMLValidationSettings validationSettings = new XMLValidationSettings();
+		validationSettings.setResolveExternalEntities(true);
+		settings.setValidation(validationSettings);
+
+		Locale defaultLocale = Locale.getDefault();
+		try {
+			// Set local as English for formatting integer in error message with ','
+			// See 64,000 in "The parser has encountered more than \"64,000\" entity
+			// expansions in this document; this is the limit imposed by the application."
+			Locale.setDefault(Locale.ENGLISH);
+			String xml = "<?xml version=\"1.0\"?>\r\n" + //
+					"<!DOCTYPE lolz [\r\n" + //
+					"    <!ENTITY lol \"lol\">\r\n" + //
+					"    <!ELEMENT lolz (#PCDATA)>\r\n" + //
+					"    <!ENTITY lol1 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;\">\r\n" + //
+					"    <!ENTITY lol2 \"&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;\">\r\n" + //
+					"    <!ENTITY lol3 \"&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;\">\r\n" + //
+					"    <!ENTITY lol4 \"&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;\">\r\n" + //
+					"    <!ENTITY lol5 \"&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;\">\r\n" + //
+					"    <!ENTITY lol6 \"&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;\">\r\n" + //
+					"    <!ENTITY lol7 \"&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;\">\r\n" + //
+					"    <!ENTITY lol8 \"&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;\">\r\n" + //
+					"    <!ENTITY lol9 \"&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;\">\r\n" + //
+					"]>\r\n" + //
+					"<lolz>&lol9;</lolz>";
+
+			Diagnostic diagnostic = d(14, 6, 14, 12, DTDErrorCode.EntityExpansionLimitExceeded, //
+					"The parser has encountered more than \"64,000\" entity expansions in this document; this is the limit imposed by the application.",
+					"xml", DiagnosticSeverity.Error);
+			XMLAssert.testDiagnosticsFor(new XMLLanguageService(), xml, null, null, null, false, settings, diagnostic);
+		} finally {
+			Locale.setDefault(defaultLocale);
+		}
+	}
+
+	@Test
+	public void customEntityExpansionLimit() {
+		ContentModelSettings settings = new ContentModelSettings();
+		settings.setUseCache(true);
+		XMLValidationSettings validationSettings = new XMLValidationSettings();
+		validationSettings.setResolveExternalEntities(true);
+		settings.setValidation(validationSettings);
+
+		try {
+			System.setProperty("jdk.xml.entityExpansionLimit", "10");
+
+			String xml = "<?xml version=\"1.0\"?>\r\n" + //
+					"<!DOCTYPE lolz [\r\n" + //
+					"    <!ENTITY lol \"lol\">\r\n" + //
+					"    <!ELEMENT lolz (#PCDATA)>\r\n" + //
+					"    <!ENTITY lol1 \"&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;\">\r\n" + //
+					"    <!ENTITY lol2 \"&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;\">\r\n" + //
+					"    <!ENTITY lol3 \"&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;\">\r\n" + //
+					"    <!ENTITY lol4 \"&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;\">\r\n" + //
+					"    <!ENTITY lol5 \"&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;\">\r\n" + //
+					"    <!ENTITY lol6 \"&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;\">\r\n" + //
+					"    <!ENTITY lol7 \"&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;\">\r\n" + //
+					"    <!ENTITY lol8 \"&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;\">\r\n" + //
+					"    <!ENTITY lol9 \"&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;\">\r\n" + //
+					"]>\r\n" + //
+					"<lolz>&lol9;</lolz>";
+
+			Diagnostic diagnostic = d(14, 6, 14, 12, DTDErrorCode.EntityExpansionLimitExceeded, //
+					"The parser has encountered more than \"10\" entity expansions in this document; this is the limit imposed by the application.",
+					"xml", DiagnosticSeverity.Error);
+			XMLAssert.testDiagnosticsFor(new XMLLanguageService(), xml, null, null, null, false, settings, diagnostic);
+
+		} finally {
+			System.setProperty("jdk.xml.entityExpansionLimit", "");
+		}
 	}
 
 	private static void testDiagnosticsFor(String xml, Diagnostic... expected) {
 		XMLAssert.testDiagnosticsFor(xml, "src/test/resources/catalogs/catalog.xml", expected);
 	}
 
+	private static void testPublicDiagnosticsFor(String xml, Diagnostic... expected) {
+		XMLAssert.testDiagnosticsFor(xml, "src/test/resources/catalogs/catalog-public.xml", expected);
+	}
+
+	private static void testDiagnosticsFor(String xml, String fileURI, Diagnostic... expected) {
+		XMLAssert.testDiagnosticsFor(xml, "src/test/resources/catalogs/catalog.xml", null, fileURI, expected);
+	}
+
+	private static String getGrammarFileURI(String grammarURI) throws MalformedURIException {
+		int index = grammarURI.lastIndexOf('.');
+		String path = grammarURI.substring(index + 1, grammarURI.length());
+		return XMLEntityManager.expandSystemId(grammarURI, "src/test/resources/" + path + "/test.xml", true);
+	}
 }

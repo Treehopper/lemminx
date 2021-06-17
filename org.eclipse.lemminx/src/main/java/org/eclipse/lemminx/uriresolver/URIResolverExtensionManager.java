@@ -28,7 +28,7 @@ import org.apache.xerces.xni.parser.XMLInputSource;
  * URI resolver manager.
  *
  */
-public class URIResolverExtensionManager implements URIResolverExtension, IExternalSchemaLocationProvider {
+public class URIResolverExtensionManager implements URIResolverExtension, IExternalGrammarLocationProvider {
 
 	private final List<URIResolverExtension> resolvers;
 
@@ -40,6 +40,11 @@ public class URIResolverExtensionManager implements URIResolverExtension, IExter
 	}
 
 	class DefaultURIResolverExtension implements URIResolverExtension {
+
+		@Override
+		public String getName() {
+			return "default";
+		}
 
 		@Override
 		public String resolve(String baseLocation, String publicId, String systemId) {
@@ -98,6 +103,20 @@ public class URIResolverExtensionManager implements URIResolverExtension, IExter
 		return defaultURIResolverExtension.resolve(baseLocation, publicId, systemId);
 	}
 
+	public ResolvedURIInfo resolveInfo(String baseLocation, String publicId, String systemId) {
+		for (URIResolverExtension resolver : resolvers) {
+			String resolvedURI = resolver.resolve(baseLocation, publicId, systemId);
+			if (resolvedURI != null && !resolvedURI.isEmpty()) {
+				return new ResolvedURIInfo(resolvedURI, resolver);
+			}
+		}
+		String resolvedURI = defaultURIResolverExtension.resolve(baseLocation, publicId, systemId);
+		if (resolvedURI != null && !resolvedURI.isEmpty()) {
+			return new ResolvedURIInfo(resolvedURI, defaultURIResolverExtension);
+		}
+		return null;
+	}
+
 	@Override
 	public XMLInputSource resolveEntity(XMLResourceIdentifier resourceIdentifier) throws XNIException, IOException {
 		XMLInputSource is = null;
@@ -111,10 +130,11 @@ public class URIResolverExtensionManager implements URIResolverExtension, IExter
 	}
 
 	@Override
-	public Map getExternalSchemaLocation(URI fileURI) {
+	public Map<String, String> getExternalGrammarLocation(URI fileURI) {
 		for (URIResolverExtension resolver : resolvers) {
-			if (resolver instanceof IExternalSchemaLocationProvider) {
-				Map result = ((IExternalSchemaLocationProvider) resolver).getExternalSchemaLocation(fileURI);
+			if (resolver instanceof IExternalGrammarLocationProvider) {
+				Map<String, String> result = ((IExternalGrammarLocationProvider) resolver)
+						.getExternalGrammarLocation(fileURI);
 				if (result != null) {
 					return result;
 				}

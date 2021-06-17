@@ -16,7 +16,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.eclipse.lemminx.settings.PathPatternMatcher;
-import org.eclipse.lemminx.uriresolver.IExternalSchemaLocationProvider;
+import org.eclipse.lemminx.uriresolver.IExternalGrammarLocationProvider;
+import org.eclipse.lemminx.utils.DOMUtils;
 
 /**
  * XML file association between a XML file pattern (glob) and an XML Schema file
@@ -38,8 +39,13 @@ public class XMLFileAssociation extends PathPatternMatcher {
 
 	public Map<String, String> getExternalSchemaLocation() {
 		if (externalSchemaLocation == null) {
-			this.externalSchemaLocation = new HashMap<String, String>();
-			this.externalSchemaLocation.put(IExternalSchemaLocationProvider.NO_NAMESPACE_SCHEMA_LOCATION, systemId);
+			this.externalSchemaLocation = new HashMap<>();
+			if (DOMUtils.isXSD(systemId)) {
+				this.externalSchemaLocation.put(IExternalGrammarLocationProvider.NO_NAMESPACE_SCHEMA_LOCATION,
+						systemId);
+			} else {
+				this.externalSchemaLocation.put(IExternalGrammarLocationProvider.DOCTYPE, systemId);
+			}
 		}
 		return externalSchemaLocation;
 	}
@@ -55,25 +61,32 @@ public class XMLFileAssociation extends PathPatternMatcher {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj)
+		if (this == obj) {
 			return true;
-		if (obj == null)
+		}
+		if (obj == null) {
 			return false;
-		if (getClass() != obj.getClass())
+		}
+		if (getClass() != obj.getClass()) {
 			return false;
+		}
 		XMLFileAssociation other = (XMLFileAssociation) obj;
 		String thisPattern = getPattern();
 		String otherPattern = other.getPattern();
 		if (thisPattern == null) {
-			if (otherPattern != null)
+			if (otherPattern != null) {
 				return false;
-		} else if (!thisPattern.equals(otherPattern))
+			}
+		} else if (!thisPattern.equals(otherPattern)) {
 			return false;
+		}
 		if (systemId == null) {
-			if (other.systemId != null)
+			if (other.systemId != null) {
 				return false;
-		} else if (!systemId.equals(other.systemId))
+			}
+		} else if (!systemId.equals(other.systemId)) {
 			return false;
+		}
 		return true;
 	}
 }

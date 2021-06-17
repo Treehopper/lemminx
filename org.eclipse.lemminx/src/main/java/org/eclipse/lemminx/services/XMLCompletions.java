@@ -18,6 +18,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -31,6 +32,7 @@ import org.eclipse.lemminx.dom.DOMAttr;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.DOMElement;
 import org.eclipse.lemminx.dom.DOMNode;
+import org.eclipse.lemminx.dom.DOMText;
 import org.eclipse.lemminx.dom.DTDDeclParameter;
 import org.eclipse.lemminx.dom.parser.Scanner;
 import org.eclipse.lemminx.dom.parser.ScannerState;
@@ -42,6 +44,7 @@ import org.eclipse.lemminx.services.extensions.ICompletionResponse;
 import org.eclipse.lemminx.services.extensions.XMLExtensionsRegistry;
 import org.eclipse.lemminx.services.snippets.IXMLSnippetContext;
 import org.eclipse.lemminx.settings.SharedSettings;
+import org.eclipse.lemminx.settings.XMLCompletionSettings;
 import org.eclipse.lemminx.utils.StringUtils;
 import org.eclipse.lemminx.utils.XMLPositionUtility;
 import org.eclipse.lsp4j.CompletionItem;
@@ -53,6 +56,8 @@ import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.jsonrpc.CancelChecker;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.w3c.dom.Node;
 
 /**
  * XML completions support.
@@ -88,7 +93,7 @@ public class XMLCompletions {
 			if (text.isEmpty()) {
 				// When XML document is empty, try to collect root element (from file
 				// association)
-				collectInsideContent(completionRequest, completionResponse);
+				collectInsideContent(completionRequest, completionResponse, cancelChecker);
 				return completionResponse;
 			}
 
@@ -101,14 +106,14 @@ public class XMLCompletions {
 				case StartTagOpen:
 					if (scanner.getTokenEnd() == offset) {
 						int endPos = scanNextForEndPos(offset, scanner, TokenType.StartTag);
-						collectTagSuggestions(offset, endPos, completionRequest, completionResponse);
+						collectTagSuggestions(offset, endPos, completionRequest, completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					break;
 				case StartTag:
 					if (scanner.getTokenOffset() <= offset && offset <= scanner.getTokenEnd()) {
 						collectOpenTagSuggestions(scanner.getTokenOffset(), scanner.getTokenEnd(), completionRequest,
-								completionResponse);
+								completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					currentTag = scanner.getTokenText();
@@ -116,13 +121,13 @@ public class XMLCompletions {
 				case AttributeName:
 					if (scanner.getTokenOffset() <= offset && offset <= scanner.getTokenEnd()) {
 						collectAttributeNameSuggestions(scanner.getTokenOffset(), scanner.getTokenEnd(),
-								completionRequest, completionResponse);
+								completionRequest, completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					break;
 				case DelimiterAssign:
 					if (scanner.getTokenEnd() == offset) {
-						collectAttributeValueSuggestions(offset, offset, completionRequest, completionResponse);
+						collectAttributeValueSuggestions(offset, offset, completionRequest, completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					break;
@@ -135,19 +140,18 @@ public class XMLCompletions {
 
 					if (DOMNode.isIncluded(systemId, offset)) {
 						/**
-						 * Completion invoked within systemId parameter
-						 * ie, completion offset is at | like so:
-						 * <!DOCTYPE foo SYSTEM "./|">
+						 * Completion invoked within systemId parameter ie, completion offset is at |
+						 * like so: <!DOCTYPE foo SYSTEM "./|">
 						 */
-						collectDTDSystemIdSuggestions(systemId.getStart(), systemId.getEnd(),
-								completionRequest, completionResponse);
+						collectDTDSystemIdSuggestions(systemId.getStart(), systemId.getEnd(), completionRequest,
+								completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					break;
 				case AttributeValue:
 					if (scanner.getTokenOffset() <= offset && offset <= scanner.getTokenEnd()) {
 						collectAttributeValueSuggestions(scanner.getTokenOffset(), scanner.getTokenEnd(),
-								completionRequest, completionResponse);
+								completionRequest, completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					break;
@@ -157,23 +161,23 @@ public class XMLCompletions {
 						case AfterOpeningStartTag:
 							int startPos = scanner.getTokenOffset();
 							int endTagPos = scanNextForEndPos(offset, scanner, TokenType.StartTag);
-							collectTagSuggestions(startPos, endTagPos, completionRequest, completionResponse);
+							collectTagSuggestions(startPos, endTagPos, completionRequest, completionResponse, cancelChecker);
 							return completionResponse;
 						case WithinTag:
 						case AfterAttributeName:
 							collectAttributeNameSuggestions(scanner.getTokenEnd(), completionRequest,
-									completionResponse);
+									completionResponse, cancelChecker);
 							return completionResponse;
 						case BeforeAttributeValue:
 							collectAttributeValueSuggestions(scanner.getTokenEnd(), offset, completionRequest,
-									completionResponse);
+									completionResponse, cancelChecker);
 							return completionResponse;
 						case AfterOpeningEndTag:
 							collectCloseTagSuggestions(scanner.getTokenOffset() - 1, false, offset, completionRequest,
-									completionResponse);
+									completionResponse, cancelChecker);
 							return completionResponse;
 						case WithinContent:
-							collectInsideContent(completionRequest, completionResponse);
+							collectInsideContent(completionRequest, completionResponse, cancelChecker);
 							return completionResponse;
 						default:
 						}
@@ -184,7 +188,7 @@ public class XMLCompletions {
 						int afterOpenBracket = scanner.getTokenOffset() + 1;
 						int endOffset = scanNextForEndPos(offset, scanner, TokenType.EndTag);
 						collectCloseTagSuggestions(afterOpenBracket, false, endOffset, completionRequest,
-								completionResponse);
+								completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					break;
@@ -195,7 +199,7 @@ public class XMLCompletions {
 							char ch = text.charAt(start);
 							if (ch == '/') {
 								collectCloseTagSuggestions(start, false, scanner.getTokenEnd(), completionRequest,
-										completionResponse);
+										completionResponse, cancelChecker);
 								return completionResponse;
 							} else if (!isWhitespace(ch)) {
 								break;
@@ -207,7 +211,7 @@ public class XMLCompletions {
 				case StartTagClose:
 					if (offset <= scanner.getTokenEnd()) {
 						if (currentTag != null && currentTag.length() > 0) {
-							collectInsideContent(completionRequest, completionResponse);
+							collectInsideContent(completionRequest, completionResponse, cancelChecker);
 							return completionResponse;
 						}
 					}
@@ -218,7 +222,7 @@ public class XMLCompletions {
 								&& xmlDocument.getText().charAt(offset - 1) == '>') { // if the actual character typed
 																						// was
 																						// '>'
-							collectInsideContent(completionRequest, completionResponse);
+							collectInsideContent(completionRequest, completionResponse, cancelChecker);
 							return completionResponse;
 						}
 					}
@@ -226,7 +230,7 @@ public class XMLCompletions {
 				case EndTagClose:
 					if (offset <= scanner.getTokenEnd()) {
 						if (currentTag != null && currentTag.length() > 0) {
-							collectInsideContent(completionRequest, completionResponse);
+							collectInsideContent(completionRequest, completionResponse, cancelChecker);
 							return completionResponse;
 						}
 					}
@@ -240,7 +244,7 @@ public class XMLCompletions {
 						break;
 					}
 					if (offset <= scanner.getTokenEnd()) {
-						collectInsideContent(completionRequest, completionResponse);
+						collectInsideContent(completionRequest, completionResponse, cancelChecker);
 						return completionResponse;
 					}
 					break;
@@ -276,7 +280,7 @@ public class XMLCompletions {
 
 	/**
 	 * Collect snippets suggestions.
-	 * 
+	 *
 	 * @param completionRequest  completion request.
 	 * @param completionResponse completion response.
 	 */
@@ -346,16 +350,16 @@ public class XMLCompletions {
 			// There is one of character of the suffix
 			offset++;
 			if (suffixIndex == suffix.length()) {
-				// the suffix index is the last character of the suffix  
+				// the suffix index is the last character of the suffix
 				return offset;
 			}
 			// Try to eat the most characters of the suffix
-			for (; offset < text.length(); offset++) {								
+			for (; offset < text.length(); offset++) {
 				suffixIndex++;
 				if (suffixIndex == suffix.length()) {
-					// the suffix index is the last character of the suffix  
+					// the suffix index is the last character of the suffix
 					return offset;
-				}	
+				}
 				ch = text.charAt(offset);
 				if (suffix.charAt(suffixIndex) != ch) {
 					return offset;
@@ -369,7 +373,7 @@ public class XMLCompletions {
 	/**
 	 * Returns the limit start offset of the expression according to the current
 	 * node.
-	 * 
+	 *
 	 * @param currentNode the node.
 	 * @param offset      the offset.
 	 * @return the limit start offset of the expression according to the current
@@ -435,7 +439,7 @@ public class XMLCompletions {
 	/**
 	 * Returns true if completion was triggered inside DTD content (internal or
 	 * external DTD) and false otherwise.
-	 * 
+	 *
 	 * @param node
 	 * @param xmlDocument
 	 * @return true if completion was triggered inside DTD content (internal or
@@ -465,7 +469,7 @@ public class XMLCompletions {
 		return true;
 	}
 
-	public AutoCloseTagResponse doTagComplete(DOMDocument xmlDocument, Position position, CancelChecker cancelChecker) {
+	public AutoCloseTagResponse doTagComplete(DOMDocument xmlDocument, Position position, XMLCompletionSettings completionSettings, CancelChecker cancelChecker) {
 		int offset;
 		try {
 			offset = xmlDocument.offsetAt(position);
@@ -488,7 +492,7 @@ public class XMLCompletions {
 				return null;
 			}
 			DOMElement element = ((DOMElement) node);
-			if (node != null && node.isElement() && !element.isSelfClosed() && element.getTagName() != null
+			if (node != null && node.isElement() && !element.isSelfClosed() && element.hasTagName()
 					&& !isEmptyElement(((DOMElement) node).getTagName()) && node.getStart() < offset
 					&& (!element.hasEndTag() || (element.getTagName().equals(node.getParentNode().getNodeName())
 							&& !isBalanced(node)))) {
@@ -497,7 +501,7 @@ public class XMLCompletions {
 			}
 		} else if (cBefore == '<' && c == '/') { // Case: <a> </|
 			DOMNode node = xmlDocument.findNodeBefore(offset);
-			while (node != null && node.isClosed()) {
+			while ((node != null && node.isClosed()) || (node.isElement() && ((DOMElement) node).isOrphanEndTag())) {
 				node = node.getParentNode();
 			}
 			if (node != null && node.isElement() && ((DOMElement) node).getTagName() != null) {
@@ -519,13 +523,8 @@ public class XMLCompletions {
 						}
 					}
 					String text = xmlDocument.getText();
-					boolean closeBracketAfterSlash = offset < text.length() ? text.charAt(offset) == '>' : false; // After
-																													// the
-																													// slash
-																													// is
-																													// a
-																													// close
-																													// bracket
+					// After the slash is a close bracket
+					boolean closeBracketAfterSlash = offset < text.length() ? text.charAt(offset) == '>' : false;
 
 					// Case: <a/| ...
 					if (closeBracketAfterSlash == false) { // no '>' after slash
@@ -534,7 +533,7 @@ public class XMLCompletions {
 							return null;
 						}
 						snippet = ">$0";
-						if (element1.hasEndTag()) { // Case: <a/| </a>
+						if (element1.hasEndTag() && completionSettings.isAutoCloseRemovesContent()) { // Case: <a/| </a>
 							try {
 								end = xmlDocument.positionAt(element1.getEnd());
 							} catch (BadLocationException e) {
@@ -589,16 +588,16 @@ public class XMLCompletions {
 
 	// Tags that look like '<'
 	private void collectTagSuggestions(int tagStart, int tagEnd, CompletionRequest completionRequest,
-			CompletionResponse completionResponse) {
-		collectOpenTagSuggestions(tagStart, tagEnd, completionRequest, completionResponse);
-		collectCloseTagSuggestions(tagStart, true, tagEnd, completionRequest, completionResponse);
+			CompletionResponse completionResponse, CancelChecker cancelChecker) {
+		collectOpenTagSuggestions(tagStart, tagEnd, completionRequest, completionResponse, cancelChecker);
+		collectCloseTagSuggestions(tagStart, true, tagEnd, completionRequest, completionResponse, cancelChecker);
 	}
 
 	private void collectOpenTagSuggestions(int afterOpenBracket, int tagNameEnd, CompletionRequest completionRequest,
-			CompletionResponse completionResponse) {
+			CompletionResponse completionResponse, CancelChecker cancelChecker) {
 		try {
 			Range replaceRange = getReplaceRange(afterOpenBracket - 1, tagNameEnd, completionRequest);
-			collectOpenTagSuggestions(true, replaceRange, completionRequest, completionResponse);
+			collectOpenTagSuggestions(true, replaceRange, completionRequest, completionResponse, cancelChecker);
 		} catch (BadLocationException e) {
 			LOGGER.log(Level.SEVERE, "While performing Completions the provided offset was a BadLocation", e);
 			return;
@@ -606,7 +605,7 @@ public class XMLCompletions {
 	}
 
 	private void collectOpenTagSuggestions(boolean hasOpenBracket, Range replaceRange,
-			CompletionRequest completionRequest, CompletionResponse completionResponse) {
+			CompletionRequest completionRequest, CompletionResponse completionResponse, CancelChecker cancelChecker) {
 		try {
 			DOMDocument document = completionRequest.getXMLDocument();
 			String text = document.getText();
@@ -624,9 +623,12 @@ public class XMLCompletions {
 		completionRequest.setReplaceRange(replaceRange);
 		for (ICompletionParticipant participant : getCompletionParticipants()) {
 			try {
-				participant.onTagOpen(completionRequest, completionResponse);
+				participant.onTagOpen(completionRequest, completionResponse, cancelChecker);
+			} catch (CancellationException e) {
+				throw e;
 			} catch (Exception e) {
-				LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onTagOpen", e);
+				LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onTagOpen for participant '"
+						+ participant.getClass().getName() + "'.", e);
 			}
 		}
 		DOMElement parentNode = completionRequest.getParentElement();
@@ -660,7 +662,7 @@ public class XMLCompletions {
 							xml.append("</").append(tag).append(">");
 						}
 					}
-					item.setTextEdit(new TextEdit(replaceRange, xml.toString()));
+					item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, xml.toString())));
 					item.setInsertTextFormat(InsertTextFormat.Snippet);
 
 					completionResponse.addCompletionItem(item);
@@ -682,7 +684,7 @@ public class XMLCompletions {
 	}
 
 	private void collectCloseTagSuggestions(int afterOpenBracket, boolean inOpenTag, int tagNameEnd,
-			CompletionRequest completionRequest, CompletionResponse completionResponse) {
+			CompletionRequest completionRequest, CompletionResponse completionResponse, CancelChecker cancelChecker) {
 		try {
 			Range range = getReplaceRange(afterOpenBracket, tagNameEnd, completionRequest);
 			String text = completionRequest.getXMLDocument().getText();
@@ -722,15 +724,15 @@ public class XMLCompletions {
 						String endIndent = getLineIndent(afterOpenBracket, text);
 						if (startIndent != null && endIndent != null && !startIndent.equals(endIndent)) {
 							String insertText = startIndent + "</" + tag + closeTag;
-							item.setTextEdit(new TextEdit(
+							item.setTextEdit(Either.forLeft(new TextEdit(
 									getReplaceRange(afterOpenBracket - endIndent.length(), offset, completionRequest),
-									insertText));
+									insertText)));
 							item.setFilterText(endIndent + "</" + tag + closeTag);
 						} else {
 							String openTag = openEndTag ? "<" : "";
 							String insertText = openTag + "/" + tag + closeTag;
 							item.setFilterText(insertText);
-							item.setTextEdit(new TextEdit(range, insertText));
+							item.setTextEdit(Either.forLeft(new TextEdit(range, insertText)));
 						}
 						completionResponse.addCompletionItem(item);
 					}
@@ -746,21 +748,52 @@ public class XMLCompletions {
 		}
 	}
 
-	private void collectInsideContent(CompletionRequest request, CompletionResponse response) {
+	private void collectInsideContent(CompletionRequest request, CompletionResponse response, CancelChecker cancelChecker) {
 		Range tagNameRange = request.getXMLDocument().getElementNameRangeAt(request.getOffset());
 		if (tagNameRange != null) {
-			collectOpenTagSuggestions(false, tagNameRange, request, response);
+			collectOpenTagSuggestions(false, tagNameRange, request, response, cancelChecker);
 			collectCloseTagSuggestions(tagNameRange, true, true, false, request, response);
+		}
+		// Adjust the range for covering the text node.
+		Range textRange = getTextRangeInsideContent(request.getNode());
+		if (textRange != null) {
+			request.setReplaceRange(textRange);
 		}
 		// Participant completion on XML content
 		for (ICompletionParticipant participant : getCompletionParticipants()) {
 			try {
-				participant.onXMLContent(request, response);
+				participant.onXMLContent(request, response, cancelChecker);
+			} catch (CancellationException e) {
+				throw e;
 			} catch (Exception e) {
-				LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onXMLContent", e);
+				LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onXMLContent for participant '"
+						+ participant.getClass().getName() + "'.", e);
 			}
 		}
 		collectionRegionProposals(request, response);
+	}
+
+	private static Range getTextRangeInsideContent(DOMNode node) {
+		switch (node.getNodeType()) {
+		case Node.ELEMENT_NODE:
+			Node firstChild = node.getFirstChild();
+			if (firstChild == null) {
+				// ex : <root>|</root>
+				DOMElement element = (DOMElement) node;
+				return XMLPositionUtility.createRange(element.getStartTagCloseOffset() + 1,
+						element.getStartTagCloseOffset() + 1, element.getOwnerDocument());
+			}
+			if (firstChild.getNodeType() == Node.TEXT_NODE) {
+				// ex : <root>abcd|</root>
+				return XMLPositionUtility.selectText((DOMText) firstChild);
+			}
+			return null;
+		case Node.TEXT_NODE:
+			// ex : <root> | </root>
+			return XMLPositionUtility.selectText((DOMText) node);
+		}
+		// should never occur
+		return null;
 	}
 
 	private void collectionRegionProposals(ICompletionRequest request, ICompletionResponse response) {
@@ -778,7 +811,7 @@ public class XMLCompletions {
 
 				String text = request.isCompletionSnippetsSupported() ? "<!-- #region $1-->" : "<!-- #region -->";
 				CompletionItem beginProposal = new CompletionItem("#region");
-				beginProposal.setTextEdit(new TextEdit(range, text));
+				beginProposal.setTextEdit(Either.forLeft(new TextEdit(range, text)));
 				beginProposal.setDocumentation("Insert Folding Region Start");
 				beginProposal.setFilterText(match.group());
 				beginProposal.setSortText("za");
@@ -787,7 +820,7 @@ public class XMLCompletions {
 				response.addCompletionAttribute(beginProposal);
 
 				CompletionItem endProposal = new CompletionItem("#endregion");
-				endProposal.setTextEdit(new TextEdit(range, "<!-- #endregion-->"));
+				endProposal.setTextEdit(Either.forLeft(new TextEdit(range, "<!-- #endregion-->")));
 				endProposal.setDocumentation("Insert Folding Region End");
 				endProposal.setFilterText(match.group());
 				endProposal.setSortText("zb");
@@ -801,13 +834,13 @@ public class XMLCompletions {
 	}
 
 	private void collectAttributeNameSuggestions(int nameStart, CompletionRequest completionRequest,
-			CompletionResponse completionResponse) {
+			CompletionResponse completionResponse, CancelChecker cancelChecker) {
 		collectAttributeNameSuggestions(nameStart, completionRequest.getOffset(), completionRequest,
-				completionResponse);
+				completionResponse, cancelChecker);
 	}
 
 	private void collectAttributeNameSuggestions(int nameStart, int nameEnd, CompletionRequest completionRequest,
-			CompletionResponse completionResponse) {
+			CompletionResponse completionResponse, CancelChecker cancelChecker) {
 		int replaceEnd = completionRequest.getOffset();
 		String text = completionRequest.getXMLDocument().getText();
 		while (replaceEnd < nameEnd && text.charAt(replaceEnd) != '<' && text.charAt(replaceEnd) != '?') { // < is a
@@ -826,18 +859,27 @@ public class XMLCompletions {
 			boolean generateValue = !isFollowedBy(text, nameEnd, ScannerState.AfterAttributeName,
 					TokenType.DelimiterAssign);
 			for (ICompletionParticipant participant : getCompletionParticipants()) {
-				participant.onAttributeName(generateValue, completionRequest, completionResponse);
+				try {
+					participant.onAttributeName(generateValue, completionRequest, completionResponse, cancelChecker);
+				} catch (CancellationException e) {
+					throw e;
+				} catch (Exception e) {
+					LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onAttributeName for participant '"
+							+ participant.getClass().getName() + "'.", e);
+				}
 			}
 		} catch (BadLocationException e) {
 			LOGGER.log(Level.SEVERE, "While performing Completions, getReplaceRange() was given a bad Offset location",
 					e);
+		} catch (CancellationException e) {
+			throw e;
 		} catch (Exception e) {
 			LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onAttributeName", e);
 		}
 	}
 
 	private void collectAttributeValueSuggestions(int valueStart, int valueEnd, CompletionRequest completionRequest,
-			CompletionResponse completionResponse) {
+			CompletionResponse completionResponse, CancelChecker cancelChecker) {
 		boolean addQuotes = false;
 		String valuePrefix;
 		int offset = completionRequest.getOffset();
@@ -870,11 +912,22 @@ public class XMLCompletions {
 				completionRequest.setReplaceRange(replaceRange);
 				completionRequest.setAddQuotes(addQuotes);
 				for (ICompletionParticipant participant : completionParticipants) {
-					participant.onAttributeValue(valuePrefix, completionRequest, completionResponse);
+					try {
+						participant.onAttributeValue(valuePrefix, completionRequest, completionResponse, cancelChecker);
+					} catch (CancellationException e) {
+						throw e;
+					} catch (Exception e) {
+						LOGGER.log(Level.SEVERE,
+								"While performing ICompletionParticipant#onAttributeValue for participant '"
+										+ participant.getClass().getName() + "'.",
+								e);
+					}
 				}
 			} catch (BadLocationException e) {
 				LOGGER.log(Level.SEVERE,
 						"While performing Completions, getReplaceRange() was given a bad Offset location", e);
+			} catch (CancellationException e) {
+				throw e;
 			} catch (Exception e) {
 				LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onAttributeValue", e);
 			}
@@ -883,14 +936,16 @@ public class XMLCompletions {
 
 	/**
 	 * Collect completion items for DTD systemId
-	 * 
-	 * @param valueStart         the start offset of the systemId value, including quote
-	 * @param valueEnd           the end offset of the systemId value, including quote
+	 *
+	 * @param valueStart         the start offset of the systemId value, including
+	 *                           quote
+	 * @param valueEnd           the end offset of the systemId value, including
+	 *                           quote
 	 * @param completionRequest  the completion request
 	 * @param completionResponse the completion response
 	 */
 	private void collectDTDSystemIdSuggestions(int valueStart, int valueEnd, CompletionRequest completionRequest,
-			CompletionResponse completionResponse) {
+			CompletionResponse completionResponse, CancelChecker cancelChecker) {
 		int offset = completionRequest.getOffset();
 		String text = completionRequest.getXMLDocument().getText();
 		int valueContentStart = valueStart + 1;
@@ -905,11 +960,22 @@ public class XMLCompletions {
 				Range replaceRange = getReplaceRange(valueContentStart, valueContentEnd, completionRequest);
 				completionRequest.setReplaceRange(replaceRange);
 				for (ICompletionParticipant participant : completionParticipants) {
-					participant.onDTDSystemId(valuePrefix, completionRequest, completionResponse);
+					try {
+						participant.onDTDSystemId(valuePrefix, completionRequest, completionResponse, cancelChecker);
+					} catch (CancellationException e) {
+						throw e;
+					} catch (Exception e) {
+						LOGGER.log(Level.SEVERE,
+								"While performing ICompletionParticipant#onDTDSystemId for participant '"
+										+ participant.getClass().getName() + "'.",
+								e);
+					}
 				}
 			} catch (BadLocationException e) {
 				LOGGER.log(Level.SEVERE,
 						"While performing Completions, getReplaceRange() was given a bad Offset location", e);
+			} catch (CancellationException e) {
+				throw e;
 			} catch (Exception e) {
 				LOGGER.log(Level.SEVERE, "While performing ICompletionParticipant#onDTDSystemId", e);
 			}
@@ -928,7 +994,7 @@ public class XMLCompletions {
 
 	/**
 	 * Returns list of {@link ICompletionParticipant}.
-	 * 
+	 *
 	 * @return list of {@link ICompletionParticipant}.
 	 */
 	private Collection<ICompletionParticipant> getCompletionParticipants() {
@@ -942,7 +1008,7 @@ public class XMLCompletions {
 	/**
 	 * Returns starting offset of 'expectedToken' if it the next non whitespace
 	 * token after 'initialState'
-	 * 
+	 *
 	 * @param s
 	 * @param offset
 	 * @param intialState

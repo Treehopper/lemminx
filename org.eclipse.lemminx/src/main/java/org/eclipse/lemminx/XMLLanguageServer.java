@@ -16,12 +16,15 @@ package org.eclipse.lemminx;
 import static org.eclipse.lsp4j.jsonrpc.CompletableFutures.computeAsync;
 
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import org.eclipse.lemminx.client.ExtendedClientCapabilities;
 import org.eclipse.lemminx.commons.ModelTextDocument;
@@ -36,10 +39,10 @@ import org.eclipse.lemminx.extensions.contentmodel.settings.XMLValidationSetting
 import org.eclipse.lemminx.logs.LogHelper;
 import org.eclipse.lemminx.services.IXMLDocumentProvider;
 import org.eclipse.lemminx.services.IXMLNotificationService;
+import org.eclipse.lemminx.services.IXMLValidationService;
 import org.eclipse.lemminx.services.XMLLanguageService;
 import org.eclipse.lemminx.settings.AllXMLSettings;
 import org.eclipse.lemminx.settings.InitializationOptionsSettings;
-import org.eclipse.lemminx.settings.LogsSettings;
 import org.eclipse.lemminx.settings.ServerSettings;
 import org.eclipse.lemminx.settings.SharedSettings;
 import org.eclipse.lemminx.settings.XMLCodeLensSettings;
@@ -48,11 +51,13 @@ import org.eclipse.lemminx.settings.XMLFormattingOptions;
 import org.eclipse.lemminx.settings.XMLGeneralClientSettings;
 import org.eclipse.lemminx.settings.XMLPreferences;
 import org.eclipse.lemminx.settings.XMLSymbolSettings;
+import org.eclipse.lemminx.settings.XMLTelemetrySettings;
 import org.eclipse.lemminx.settings.capabilities.InitializationOptionsExtendedClientCapabilities;
 import org.eclipse.lemminx.settings.capabilities.ServerCapabilitiesInitializer;
 import org.eclipse.lemminx.settings.capabilities.XMLCapabilityManager;
+import org.eclipse.lemminx.telemetry.TelemetryManager;
 import org.eclipse.lemminx.utils.FilesUtils;
-import org.eclipse.lemminx.utils.ServerInfo;
+import org.eclipse.lemminx.utils.platform.Platform;
 import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
@@ -71,7 +76,8 @@ import org.eclipse.lsp4j.services.WorkspaceService;
  *
  */
 public class XMLLanguageServer
-		implements ProcessLanguageServer, XMLLanguageServerAPI, IXMLDocumentProvider, IXMLNotificationService {
+		implements ProcessLanguageServer, XMLLanguageServerAPI, IXMLDocumentProvider,
+		IXMLNotificationService, IXMLValidationService {
 
 	private static final Logger LOGGER = Logger.getLogger(XMLLanguageServer.class.getName());
 
@@ -81,20 +87,31 @@ public class XMLLanguageServer
 	private XMLLanguageClientAPI languageClient;
 	private final ScheduledExecutorService delayer;
 	private Integer parentProcessId;
-	public XMLCapabilityManager capabilityManager;
+	private XMLCapabilityManager capabilityManager;
+	private TelemetryManager telemetryManager;
 
 	public XMLLanguageServer() {
+		xmlTextDocumentService = new XMLTextDocumentService(this);
+		xmlWorkspaceService = new XMLWorkspaceService(this);
+
 		xmlLanguageService = new XMLLanguageService();
 		xmlLanguageService.setDocumentProvider(this);
 		xmlLanguageService.setNotificationService(this);
-		xmlTextDocumentService = new XMLTextDocumentService(this);
-		xmlWorkspaceService = new XMLWorkspaceService(this);
+		xmlLanguageService.setCommandService(xmlWorkspaceService);
+		xmlLanguageService.setValidationService(this);
+
 		delayer = Executors.newScheduledThreadPool(1);
 	}
 
 	@Override
 	public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
-		LOGGER.info("Initializing XML Language server" + System.lineSeparator() + new ServerInfo().details());
+		Object initOptions = InitializationOptionsSettings.getSettings(params);
+		Object xmlSettings = AllXMLSettings.getAllXMLSettings(initOptions);
+		XMLGeneralClientSettings settings = XMLGeneralClientSettings.getGeneralXMLSettings(xmlSettings);
+
+		LogHelper.initializeRootLogger(languageClient, settings == null? null : settings.getLogs());
+
+		LOGGER.info("Initializing XML Language server" + System.lineSeparator() + Platform.details());
 
 		this.parentProcessId = params.getProcessId();
 
@@ -108,7 +125,7 @@ public class XMLLanguageServer
 		xmlTextDocumentService.updateClientCapabilities(capabilityManager.getClientCapabilities().capabilities,
 				capabilityManager.getClientCapabilities().getExtendedCapabilities());
 
-		updateSettings(InitializationOptionsSettings.getSettings(params));
+		updateSettings(initOptions, false /* already configured logging*/ );
 
 		ServerCapabilities nonDynamicServerCapabilities = ServerCapabilitiesInitializer.getNonDynamicServerCapabilities(
 				capabilityManager.getClientCapabilities(), xmlTextDocumentService.isIncrementalSupport());
@@ -121,34 +138,49 @@ public class XMLLanguageServer
 	 * turn on/off
 	 *
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.eclipse.lsp4j.services.LanguageServer#initialized(org.eclipse.lsp4j.
 	 * InitializedParams)
 	 */
 	@Override
 	public void initialized(InitializedParams params) {
 		capabilityManager.initializeCapabilities();
+		getTelemetryManager().onInitialized(params);
 	}
 
 	/**
 	 * Update XML settings configured from the client.
-	 * 
-	 * @param initializationOptionsSettings the XML settings
+	 *
+	 * @param initOptions the XML settings
 	 */
-	public synchronized void updateSettings(Object initializationOptionsSettings) {
-		if (initializationOptionsSettings == null) {
+	public synchronized void updateSettings(Object initOptions) {
+		updateSettings(initOptions, true);
+	}
+
+	/**
+	 * Update XML settings configured from the client.
+	 *
+	 * @param initOptions Settings the XML settings
+	 * @param initLogs whether to initialize the log handlers
+	 */
+	private synchronized void updateSettings(Object initOptions, boolean initLogs) {
+		if (initOptions == null) {
 			return;
 		}
 		// Update client settings
-		initializationOptionsSettings = AllXMLSettings.getAllXMLSettings(initializationOptionsSettings);
-		XMLGeneralClientSettings xmlClientSettings = XMLGeneralClientSettings
-				.getGeneralXMLSettings(initializationOptionsSettings);
+		Object initSettings = AllXMLSettings.getAllXMLSettings(initOptions);
+		XMLGeneralClientSettings xmlClientSettings = XMLGeneralClientSettings.getGeneralXMLSettings(initSettings);
 		if (xmlClientSettings != null) {
-			// Update logs settings
-			LogsSettings logsSettings = xmlClientSettings.getLogs();
-			if (logsSettings != null) {
-				LogHelper.initializeRootLogger(languageClient, logsSettings);
+			if (initLogs) {
+				// Update logs settings
+				LogHelper.initializeRootLogger(languageClient, xmlClientSettings.getLogs());
 			}
+
+			XMLTelemetrySettings newTelemetry = xmlClientSettings.getTelemetry();
+			if (newTelemetry != null) {
+				getTelemetryManager().setEnabled(newTelemetry.isEnabled());
+			}
+
 			// Update format settings
 			XMLFormattingOptions formatterSettings = xmlClientSettings.getFormat();
 			if (formatterSettings != null) {
@@ -181,15 +213,14 @@ public class XMLLanguageServer
 				FilesUtils.setCachePathSetting(workDir);
 			}
 		}
-		ContentModelSettings cmSettings = ContentModelSettings
-				.getContentModelXMLSettings(initializationOptionsSettings);
+		ContentModelSettings cmSettings = ContentModelSettings.getContentModelXMLSettings(initSettings);
 		if (cmSettings != null) {
 			XMLValidationSettings validationSettings = cmSettings.getValidation();
 			xmlTextDocumentService.getValidationSettings().merge(validationSettings);
 
 		}
 		// Update XML language service extensions
-		xmlTextDocumentService.updateSettings(initializationOptionsSettings);
+		xmlTextDocumentService.updateSettings(initSettings);
 	}
 
 	@Override
@@ -222,6 +253,7 @@ public class XMLLanguageServer
 	public void setClient(LanguageClient languageClient) {
 		this.languageClient = (XMLLanguageClientAPI) languageClient;
 		capabilityManager = new XMLCapabilityManager(this.languageClient, xmlTextDocumentService);
+		telemetryManager = new TelemetryManager(languageClient);
 	}
 
 	public XMLLanguageClientAPI getLanguageClient() {
@@ -248,7 +280,7 @@ public class XMLLanguageServer
 	@Override
 	public CompletableFuture<AutoCloseTagResponse> closeTag(TextDocumentPositionParams params) {
 		return xmlTextDocumentService.computeDOMAsync(params.getTextDocument(), (cancelChecker, xmlDocument) -> {
-			return getXMLLanguageService().doAutoClose(xmlDocument, params.getPosition(), cancelChecker);
+			return getXMLLanguageService().doAutoClose(xmlDocument, params.getPosition(), getSettings().getCompletionSettings(), cancelChecker);
 		});
 	}
 
@@ -276,11 +308,38 @@ public class XMLLanguageServer
 			// the open settings command is not supported by the client, display a simple
 			// message with LSP
 			languageClient.showMessage(new MessageParams(messageType, message));
-		}		
+		}
 	}
 
 	@Override
 	public SharedSettings getSharedSettings() {
 		return xmlTextDocumentService.getSharedSettings();
 	}
+
+	@Override
+	public Collection<DOMDocument> getAllDocuments() {
+		return xmlTextDocumentService.allDocuments().stream()
+				.map(m -> m.getModel().getNow(null))
+				.filter(Objects::nonNull)
+				.collect(Collectors.toList());
+	}
+
+	@Override
+	public void validate(DOMDocument document) {
+		xmlTextDocumentService.validate(document);
+	}
+
+	public XMLCapabilityManager getCapabilityManager() {
+		return capabilityManager;
+	}
+
+	/**
+	 * Returns the telemetry manager.
+	 *
+	 * @return the telemetry manager.
+	 */
+	public TelemetryManager getTelemetryManager() {
+		return telemetryManager;
+	}
+
 }

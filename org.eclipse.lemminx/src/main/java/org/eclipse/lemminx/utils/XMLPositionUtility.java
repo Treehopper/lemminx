@@ -81,7 +81,7 @@ public class XMLPositionUtility {
 
 	/**
 	 * Returns the attribute name range and null otherwise.
-	 * 
+	 *
 	 * @param attr the attribute.
 	 * @return the attribute name range and null otherwise.
 	 */
@@ -100,7 +100,7 @@ public class XMLPositionUtility {
 
 	/**
 	 * Returns the attribute value range and null otherwise.
-	 * 
+	 *
 	 * @param attr the attribute.
 	 * @return the attribute value range and null otherwise.
 	 */
@@ -171,7 +171,7 @@ public class XMLPositionUtility {
 
 	/**
 	 * Returns the range of the prefix of an attribute name
-	 * 
+	 *
 	 * For example, if attrName = "xsi:example", the range for "xsi" will be
 	 * returned
 	 */
@@ -268,7 +268,7 @@ public class XMLPositionUtility {
 
 	public static Range selectChildEndTag(String childTag, int offset, DOMDocument document) {
 		DOMNode parent = document.findNodeAt(offset);
-		if (parent == null || !parent.isElement() || ((DOMElement) parent).getTagName() == null) {
+		if (parent == null || !parent.isElement() || !((DOMElement) parent).hasTagName()) {
 			return null;
 		}
 
@@ -309,7 +309,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of the root start tag (excludes the '<') of the given
 	 * <code>document</code> and null otherwise.
-	 * 
+	 *
 	 * @param document the DOM document.
 	 * @return the range of the root start tag (excludes the '<') of the given
 	 *         <code>document</code> and null otherwise.
@@ -328,9 +328,9 @@ public class XMLPositionUtility {
 	/**
 	 * Finds the root element of the given document and returns the attribute value
 	 * <code>Range</code> for the attribute <code>attrName</code>.
-	 * 
+	 *
 	 * If <code>attrName</code> is not declared then null is returned.
-	 * 
+	 *
 	 * @param attrName The name of the attribute to find the range of the value for
 	 * @param document The document to use the root element of
 	 * @return The range in <code>document</code> where the declared value of
@@ -363,7 +363,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of the start tag name (excludes the '<') of the given
 	 * <code>element</code> and null otherwise.
-	 * 
+	 *
 	 * @param element the DOM element
 	 * @return the range of the start tag of the given <code>element</code> and null
 	 *         otherwise.
@@ -375,7 +375,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of a tag's local name. If the tag does not have a prefix,
 	 * implying it doesn't have a local name, it will return null.
-	 * 
+	 *
 	 * @param element
 	 * @return
 	 */
@@ -386,10 +386,10 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of the start tag name (excludes the '<') of the given
 	 * <code>element</code> and null otherwise.
-	 * 
+	 *
 	 * If suffixOnly is true then it will try to return the range of the
 	 * localName/suffix. Else it will return null.
-	 * 
+	 *
 	 * @param element    the DOM element
 	 * @param suffixOnly select the suffix portion, only when a prefix exists
 	 * @return the range of the start tag of the given <code>element</code> and null
@@ -421,7 +421,7 @@ public class XMLPositionUtility {
 	private static int getStartTagLength(DOMNode node) {
 		if (node.isElement()) {
 			DOMElement element = (DOMElement) node;
-			return element.getTagName() != null ? element.getTagName().length() : 0;
+			return element.hasTagName() ? element.getTagName().length() : 0;
 		} else if (node.isProcessingInstruction() || node.isProlog()) {
 			DOMProcessingInstruction element = (DOMProcessingInstruction) node;
 			return element.getTarget() != null ? element.getTarget().length() : 0;
@@ -450,7 +450,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of the end tag of the given <code>element</code> name and
 	 * null otherwise.
-	 * 
+	 *
 	 * @param element the DOM element
 	 * @return the range of the end tag of the given <code>element</code> and null
 	 *         otherwise.
@@ -462,7 +462,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of the end tag of the given LOCAL <code>element</code> name
 	 * and null otherwise.
-	 * 
+	 *
 	 * @param element the DOM element
 	 * @return the range of the end tag of the given <code>element</code> and null
 	 *         otherwise.
@@ -474,7 +474,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of the end tag of the given <code>element</code> and null
 	 * otherwise.
-	 * 
+	 *
 	 * @param element the DOM element
 	 * @return the range of the end tag of the given <code>element</code> and null
 	 *         otherwise.
@@ -497,67 +497,12 @@ public class XMLPositionUtility {
 		return null;
 	}
 
-	/**
-	 * Finds the offset of the first tag it comes across behind the given offset.
-	 * 
-	 * <p>
-	 * This will include the tag it starts in if the offset is within a tag's
-	 * content:
-	 * </p>
-	 * <p>
-	 * {@code  <a> <b> | </b> </a> } , will give {@code </b>}
-	 * </p>
-	 * 
-	 * or within an unclosed end tag:
-	 * 
-	 * <p>
-	 * {@code  <a> <b>  </b> </a| <c>} , will give {@code </a>}
-	 * </p>
-	 * 
-	 * 
-	 * <p>
-	 * {@code  <a> <b|>  </b> </a>} , will give {@code </a>}
-	 * </p>
-	 * 
-	 */
-	public static Range selectPreviousNodesEndTag(int offset, DOMDocument document) {
-
-		DOMNode node = null;
-		DOMNode nodeAt = document.findNodeAt(offset);
-		if (nodeAt != null && nodeAt.isElement()) {
-			node = nodeAt;
-		} else {
-			DOMNode nodeBefore = document.findNodeBefore(offset);
-			if (nodeBefore != null && nodeBefore.isElement()) {
-				node = nodeBefore;
-			}
-		}
-		if (node != null) {
-			DOMElement element = (DOMElement) node;
-			if (element.isClosed() && !element.isEndTagClosed()) {
-				return selectEndTagName(element.getEnd(), document);
-			}
-		}
-
-		// boolean firstBracket = false;
-		int i = offset;
-		char c = document.getText().charAt(i);
-		while (i >= 0) {
-			if (c == '>') {
-				return selectEndTagName(i, document);
-			}
-			i--;
-			c = document.getText().charAt(i);
-		}
-		return null;
-	}
-
 	// ------------ Entities selection
 
 	/**
 	 * Returns the range of the entity reference in a text node (ex : &amp;) and
 	 * null otherwise.
-	 * 
+	 *
 	 * @param offset   the offset
 	 * @param document the document
 	 * @return the range of the entity reference in a text node (ex : &amp;) and
@@ -570,7 +515,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range of the entity reference in a text node (ex : &amp;) and
 	 * null otherwise.
-	 * 
+	 *
 	 * @param offset            the offset
 	 * @param document          the document
 	 * @param endsWithSemicolon true if the entity reference must end with ';' and
@@ -602,7 +547,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the start offset of the entity reference (ex : &am|p;) from the left
 	 * of the given offset and -1 if no entity reference.
-	 * 
+	 *
 	 * @param text   the XML content.
 	 * @param offset the offset.
 	 * @return the start offset of the entity reference (ex : &am|p;) from the left
@@ -637,7 +582,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the end offset of the entity reference (ex : &am|p;) from the right
 	 * of the given offset and -1 if no entity reference.
-	 * 
+	 *
 	 * @param text   the XML content.
 	 * @param offset the offset.
 	 * @return the end offset of the entity reference (ex : &am|p;) from the right
@@ -660,12 +605,13 @@ public class XMLPositionUtility {
 		DOMNode element = document.findNodeAt(offset);
 		if (element != null) {
 			for (DOMNode node : element.getChildren()) {
-				if (node.isCharacterData() && ((DOMCharacterData) node).hasMultiLine()) {
-					String content = ((DOMCharacterData) node).getData();
-					int start = node.getStart();
+				if (node.isCharacterData()) {
+					DOMCharacterData data = (DOMCharacterData) node;
+					int start = data.getStartContent();
 					Integer end = null;
-					for (int i = 0; i < content.length(); i++) {
-						char c = content.charAt(i);
+					String text = document.getText();
+					for (int i = start; i < data.getEndContent(); i++) {
+						char c = text.charAt(i);
 						if (end == null) {
 							if (Character.isWhitespace(c)) {
 								start++;
@@ -692,7 +638,7 @@ public class XMLPositionUtility {
 
 	/**
 	 * Returns the text content range and null otherwise.
-	 * 
+	 *
 	 * @param text the DOM text node..
 	 * @return the text content range and null otherwise.
 	 */
@@ -725,17 +671,17 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the range covering the trimmed text belonging to the node located at
 	 * offset.
-	 * 
+	 *
 	 * This method assumes that the node located at offset only contains text.
-	 * 
+	 *
 	 * For example, if the node located at offset is:
-	 * 
+	 *
 	 * <a> hello
-	 * 
+	 *
 	 * </a>
-	 * 
+	 *
 	 * the returned range will cover only "hello".
-	 * 
+	 *
 	 * @param offset
 	 * @param document
 	 * @return range covering the trimmed text belonging to the node located at
@@ -786,7 +732,7 @@ public class XMLPositionUtility {
 	/**
 	 * Will give the range for the last VALID DTD Decl parameter at 'offset'. An
 	 * unrecognized Parameter is not considered VALID,
-	 * 
+	 *
 	 * eg: "<!ELEMENT elementName (content) UNRECOGNIZED_CONTENT" will give the
 	 * range of 1 character length, after '(content)'
 	 */
@@ -823,12 +769,12 @@ public class XMLPositionUtility {
 	/**
 	 * Will give the range for the last VALID DTD Decl parameter at 'offset'. An
 	 * unrecognized Parameter is not considered VALID,
-	 * 
+	 *
 	 * eg: <!ELEMENT elementName (content) UNRECOGNIZED_CONTENT will give the range
 	 * 1 character after '(content)'
 	 */
 	public static Range getLastValidDTDDeclParameterOrUnrecognized(int offset, DOMDocument document) {
-		DOMNode node = document.findNodeAt(offset);
+		DOMNode node = document.findNodeBefore(offset);
 		if (node instanceof DTDDeclNode) {
 			DTDDeclNode decl = (DTDDeclNode) node;
 			if (decl instanceof DTDAttlistDecl) {
@@ -854,7 +800,7 @@ public class XMLPositionUtility {
 	/**
 	 * Will give the range for the last DTD Decl parameter at 'offset'. An
 	 * unrecognized Parameter is considered as well.
-	 * 
+	 *
 	 * eg: <!ELEMENT elementName (content) UNRECOGNIZED_CONTENT will give the range
 	 * 1 character after '(content)'
 	 */
@@ -903,7 +849,7 @@ public class XMLPositionUtility {
 
 	/**
 	 * Returns the range for the given <code>node</code>.
-	 * 
+	 *
 	 * @param node the node
 	 * @return the range for the given <code>node</code>.
 	 */
@@ -923,7 +869,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the location link for the given <code>origin</code> and
 	 * <code>target</code> nodes.
-	 * 
+	 *
 	 * @param origin the origin node.
 	 * @param target the target node.
 	 * @return the location link for the given <code>origin</code> and
@@ -942,7 +888,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the location link for the given <code>origin</code> and
 	 * <code>target</code> nodes.
-	 * 
+	 *
 	 * @param origin the origin node.
 	 * @param target the target node.
 	 * @return the location link for the given <code>origin</code> and
@@ -958,7 +904,7 @@ public class XMLPositionUtility {
 	/**
 	 * Returns the location link for the given <code>origin</code> and
 	 * <code>target</code> nodes.
-	 * 
+	 *
 	 * @param origin the origin node.
 	 * @param target the target node.
 	 * @return the location link for the given <code>origin</code> and
@@ -972,7 +918,7 @@ public class XMLPositionUtility {
 
 	/**
 	 * Returns the location for the given <code>target</code> node.
-	 * 
+	 *
 	 * @param target the target node.
 	 * @return the location for the given <code>target</code> node.
 	 */
@@ -984,7 +930,7 @@ public class XMLPositionUtility {
 
 	/**
 	 * Create a document link
-	 * 
+	 *
 	 * @param target   The range in the document that should be the link
 	 * @param location URI where the link should point
 	 * @param adjust   <code>true</code> means the first and last character of
@@ -1004,10 +950,10 @@ public class XMLPositionUtility {
 
 	/**
 	 * Returns the range covering the first child of the node located at offset.
-	 * 
+	 *
 	 * Returns null if node is not a DOMElement, or if a node does not exist at
 	 * offset.
-	 * 
+	 *
 	 * @param offset
 	 * @param document
 	 * @return range covering the first child of the node located at offset

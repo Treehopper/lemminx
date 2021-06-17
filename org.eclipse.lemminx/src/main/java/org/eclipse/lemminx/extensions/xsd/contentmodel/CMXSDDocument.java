@@ -11,7 +11,6 @@
  */
 package org.eclipse.lemminx.extensions.xsd.contentmodel;
 
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -24,6 +23,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.xerces.impl.dv.XSSimpleType;
+import org.apache.xerces.impl.dv.xs.XSSimpleTypeDecl;
 import org.apache.xerces.impl.xs.SchemaGrammar;
 import org.apache.xerces.impl.xs.XMLSchemaLoader;
 import org.apache.xerces.impl.xs.XSComplexTypeDecl;
@@ -34,14 +34,17 @@ import org.apache.xerces.impl.xs.XSParticleDecl;
 import org.apache.xerces.impl.xs.opti.ElementImpl;
 import org.apache.xerces.impl.xs.traversers.XSDHandler;
 import org.apache.xerces.impl.xs.util.SimpleLocator;
+import org.apache.xerces.impl.xs.util.XSObjectListImpl;
 import org.apache.xerces.xni.QName;
 import org.apache.xerces.xni.XMLLocator;
 import org.apache.xerces.xs.StringList;
+import org.apache.xerces.xs.XSAnnotation;
 import org.apache.xerces.xs.XSAttributeDeclaration;
 import org.apache.xerces.xs.XSComplexTypeDefinition;
 import org.apache.xerces.xs.XSConstants;
 import org.apache.xerces.xs.XSElementDeclaration;
 import org.apache.xerces.xs.XSModel;
+import org.apache.xerces.xs.XSMultiValueFacet;
 import org.apache.xerces.xs.XSNamedMap;
 import org.apache.xerces.xs.XSNamespaceItem;
 import org.apache.xerces.xs.XSNamespaceItemList;
@@ -56,6 +59,7 @@ import org.eclipse.lemminx.dom.DOMNode;
 import org.eclipse.lemminx.extensions.contentmodel.model.CMDocument;
 import org.eclipse.lemminx.extensions.contentmodel.model.CMElementDeclaration;
 import org.eclipse.lemminx.extensions.contentmodel.model.FilesChangedTracker;
+import org.eclipse.lemminx.extensions.xerces.ReflectionUtils;
 import org.eclipse.lemminx.extensions.xsd.utils.XSDUtils;
 import org.eclipse.lemminx.utils.DOMUtils;
 import org.eclipse.lemminx.utils.StringUtils;
@@ -214,8 +218,19 @@ public class CMXSDDocument implements CMDocument, XSElementDeclHelper {
 				return StringUtils.TRUE_FALSE_ARRAY;
 			}
 			StringList enumerations = typeDefinition.getLexicalEnumeration();
-			if (enumerations != null) {
+			if (enumerations != null && !enumerations.isEmpty()) {
 				return enumerations;
+			}
+			XSObjectList memberTypes = typeDefinition.getMemberTypes();
+			if (memberTypes != null && !memberTypes.isEmpty()) {
+				// xs:union
+				Collection<String> enumerationValues = new ArrayList<>();
+				for (Object memberType : memberTypes) {
+					if (memberType instanceof XSSimpleTypeDefinition) {
+						enumerationValues.addAll(getEnumerationValues((XSSimpleTypeDefinition) memberType));
+					}
+				}
+				return enumerationValues;
 			}
 		}
 		return Collections.emptyList();
@@ -226,6 +241,64 @@ public class CMXSDDocument implements CMDocument, XSElementDeclHelper {
 			return ((XSSimpleType) typeDefinition).getPrimitiveKind() == XSSimpleType.PRIMITIVE_BOOLEAN;
 		}
 		return false;
+	}
+
+	static XSObjectList getEnumerationAnnotations(XSSimpleTypeDefinition simpleTypeDefinition, String value) {
+		if (simpleTypeDefinition instanceof XSSimpleTypeDecl) {
+			XSSimpleTypeDecl simpleTypeDecl = (XSSimpleTypeDecl) simpleTypeDefinition;
+			XSObjectList multiFacets = simpleTypeDecl.getMultiValueFacets();
+			if (!multiFacets.isEmpty()) {
+				XSMultiValueFacet facet = (XSMultiValueFacet) multiFacets.get(0);
+				multiFacets = facet.getAnnotations();
+				Object[] annotationArray = multiFacets.toArray();
+				if (!onlyContainsNull(annotationArray)) { // if multiValueFacets has annotations
+					return simpleTypeDecl.getMultiValueFacets();
+				}
+			} else {
+				XSObjectList memberTypes = simpleTypeDecl.getMemberTypes();
+				if (memberTypes != null) {
+					for (Object memberType : memberTypes) {
+						if (memberType instanceof XSSimpleTypeDecl) {
+							XSSimpleTypeDecl type = (XSSimpleTypeDecl) memberType;
+							XSObjectList enumerationAnnotations = type.enumerationAnnotations;
+							if (enumerationAnnotations != null) {
+								StringList values = type.getLexicalEnumeration();
+								if (values != null) {
+									int enumIndex = -1;
+									for (int i = 0; i < values.getLength(); i++) {
+										String enumValue = values.item(i);
+										if (value.equals(enumValue)) {
+											enumIndex = i;
+											break;
+										}
+									}
+									if (enumIndex != -1 && enumerationAnnotations.size() > enumIndex) {
+										XSAnnotation annotation = (XSAnnotation) enumerationAnnotations.get(enumIndex);
+										if (annotation == null) {
+											return null;
+										}
+										return new XSObjectListImpl(new XSAnnotation[] { annotation }, 1);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	private static boolean onlyContainsNull(Object[] arr) {
+		if (arr == null || arr.length == 0) {
+			return true;
+		}
+		for (Object o : arr) {
+			if (o != null) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	@Override
@@ -436,27 +509,19 @@ public class CMXSDDocument implements CMDocument, XSElementDeclHelper {
 			// - fLocalElementDecl array of Xerces Element which stores the element offset.
 
 			// Get the XMLSchemaLoader instance from the XSLoader instance
-			Field f = XSLoaderImpl.class.getDeclaredField("fSchemaLoader");
-			f.setAccessible(true);
-			XMLSchemaLoader schemaLoader = (XMLSchemaLoader) f.get(xsLoader);
+			XMLSchemaLoader schemaLoader = ReflectionUtils.getFieldValue(xsLoader, "fSchemaLoader");
 
 			// Get the XSDHandler instance from the XMLSchemaLoader instance
-			Field f2 = XMLSchemaLoader.class.getDeclaredField("fSchemaHandler");
-			f2.setAccessible(true);
-			XSDHandler handler = (XSDHandler) f2.get(schemaLoader);
+			XSDHandler handler = ReflectionUtils.getFieldValue(schemaLoader, "fSchemaHandler");
 
 			// Get the XSParticleDecl array from the XSDHandler instance
-			Field f3 = XSDHandler.class.getDeclaredField("fParticle");
-			f3.setAccessible(true);
-			XSParticleDecl[] fParticle = (XSParticleDecl[]) f3.get(handler);
+			XSParticleDecl[] fParticle = ReflectionUtils.getFieldValue(handler, "fParticle");
 
 			// Get the index where elementDeclaration is associated with a XSParticleDecl
 			int i = getXSElementDeclIndex(elementDeclaration, fParticle);
 			if (i >= 0) {
 				// Get the Xerces Element array from the XSDHandler instance
-				Field f4 = XSDHandler.class.getDeclaredField("fLocalElementDecl");
-				f4.setAccessible(true);
-				Element[] fLocalElementDecl = (Element[]) f4.get(handler);
+				Element[] fLocalElementDecl = ReflectionUtils.getFieldValue(handler, "fLocalElementDecl");
 				return (ElementImpl) fLocalElementDecl[i];
 			}
 		} catch (Exception e) {
@@ -559,9 +624,7 @@ public class CMXSDDocument implements CMDocument, XSElementDeclHelper {
 			// - fComplexTypeDecls array of XSComplexTypeDecl
 
 			// As it's not an API, we must use Java Reflection to get those 2 arrays
-			Field f = SchemaGrammar.class.getDeclaredField("fCTLocators");
-			f.setAccessible(true);
-			SimpleLocator[] fCTLocators = (SimpleLocator[]) f.get(grammar);
+			SimpleLocator[] fCTLocators = ReflectionUtils.getFieldValue(grammar, "fCTLocators");
 
 			// Find the location offset of the given complexType
 			XSComplexTypeDecl[] fComplexTypeDecls = getXSComplexTypeDecls(grammar);
@@ -587,9 +650,7 @@ public class CMXSDDocument implements CMDocument, XSElementDeclHelper {
 	 */
 	private static XSComplexTypeDecl[] getXSComplexTypeDecls(SchemaGrammar grammar) {
 		try {
-			Field fc = SchemaGrammar.class.getDeclaredField("fComplexTypeDecls");
-			fc.setAccessible(true);
-			return (XSComplexTypeDecl[]) fc.get(grammar);
+			return ReflectionUtils.getFieldValue(grammar, "fComplexTypeDecls");
 		} catch (Exception e) {
 			LOGGER.log(Level.SEVERE, "Error while retrieving list of xs:complexType of the grammar '"
 					+ grammar.getSchemaNamespace() + "'.", e);

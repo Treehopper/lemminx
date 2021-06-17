@@ -17,17 +17,24 @@ import static org.eclipse.lemminx.XMLAssert.r;
 import static org.eclipse.lemminx.XMLAssert.te;
 
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLStreamHandler;
+import java.net.URLStreamHandlerFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.function.Consumer;
 
 import org.apache.xerces.impl.XMLEntityManager;
 import org.apache.xerces.util.URI.MalformedURIException;
 import org.eclipse.lemminx.XMLAssert;
 import org.eclipse.lemminx.commons.BadLocationException;
+import org.eclipse.lemminx.extensions.contentmodel.model.ContentModelManager;
 import org.eclipse.lemminx.services.XMLLanguageService;
 import org.eclipse.lemminx.settings.SharedSettings;
+import org.eclipse.lemminx.uriresolver.URIResolverExtension;
 import org.eclipse.lsp4j.CompletionCapabilities;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionItemCapabilities;
@@ -278,6 +285,84 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 	}
 
 	@Test
+	public void completionOnAttributeValueWithUnionAndEnumeration() throws BadLocationException {
+		String xml = "<dress\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:noNamespaceSchemaLocation=\"xsd/dressSize.xsd\"\r\n" + //
+				"	size=\"|\" />";
+		XMLAssert.testCompletionFor(xml, null, "src/test/resources/dress.xml", 4, //
+				c("small", te(3, 7, 3, 7, "small"), "small", //
+						"Small documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT), //
+				c("medium", te(3, 7, 3, 7, "medium"), "medium", //
+						"Medium documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT), //
+				c("large", te(3, 7, 3, 7, "large"), "large", //
+						"Size Type documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT), //
+				c("x-large", te(3, 7, 3, 7, "x-large"), "x-large", //
+						"Size Type documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT));
+	}
+
+	@Test
+	public void completionOnTextWithUnionAndEnumeration() throws BadLocationException {
+		String xml = "<dresssize\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:noNamespaceSchemaLocation=\"xsd/dressSize.xsd\" >\r\n" + //
+				"	| " + //
+				"</dresssize>";
+		XMLAssert.testCompletionFor(xml, null, "src/test/resources/dressSize.xml", 4 /*
+																						 * start/end region + CDATA and
+																						 * Comments
+																						 */ + 4, //
+				c("small", te(2, 52, 3, 2, "small"), //
+						"\r\n" + //
+								"	small", //
+						"Small documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT), //
+				c("medium", te(2, 52, 3, 2, "medium"), //
+						"\r\n" + //
+								"	medium", //
+						"Medium documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT), //
+				c("large", te(2, 52, 3, 2, "large"), //
+						"\r\n" + //
+								"	large", //
+						"Size Type documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT), //
+				c("x-large", te(2, 52, 3, 2, "x-large"), //
+						"\r\n" + //
+								"	x-large", //
+						"Size Type documentation" + //
+								System.lineSeparator() + //
+								System.lineSeparator() + //
+								"Source: dressSize.xsd", //
+						MarkupKind.PLAINTEXT));
+	}
+
+	@Test
 	public void completionOnTextWithEnumeration() throws BadLocationException {
 		String xml = "<team xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns=\"team_namespace\" xsi:schemaLocation=\"team_namespace xsd/team.xsd\">\r\n"
 				+ //
@@ -473,8 +558,6 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 
 	@Test
 	public void issue214WithMarkdown() throws BadLocationException, MalformedURIException {
-		String edmxURI = getXMLSchemaFileURI("edmx.xsd");
-		String edmURI = getXMLSchemaFileURI("edm.xsd");
 		String xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" + //
 				"<edmx:Edmx xmlns:edmx=\"http://docs.oasis-open.org/odata/ns/edmx\" xmlns=\"http://docs.oasis-open.org/odata/ns/edm\" Version=\"4.0\">\r\n"
 				+ //
@@ -485,10 +568,9 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 				"    </edmx:Include>\r\n" + //
 				" |";
 		testCompletionMarkdownSupportFor(xml,
-				c("Annotation", te(6, 1, 6, 1, "<Annotation Term=\"\"></Annotation>"), "Annotation",
-						null, null), //
-				c("edmx:Include", te(6, 1, 6, 1, "<edmx:Include Namespace=\"\"></edmx:Include>"), "edmx:Include",
-						null, null), //
+				c("Annotation", te(6, 1, 6, 1, "<Annotation Term=\"\"></Annotation>"), "Annotation", null, null), //
+				c("edmx:Include", te(6, 1, 6, 1, "<edmx:Include Namespace=\"\"></edmx:Include>"), "edmx:Include", null,
+						null), //
 				c("edmx:IncludeAnnotations", "<edmx:IncludeAnnotations TermNamespace=\"\" />"));
 
 		xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n"
@@ -851,8 +933,7 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 		// testCompletionFor checks the duplicate label
 		XMLAssert.testCompletionFor(xml, null, "src/test/resources/tns.xml", null,
 				c("Page", te(2, 1, 2, 1, "<Page></Page>"), "Page", null, null),
-				c("AbsoluteLayout", te(2, 1, 2, 1, "<AbsoluteLayout></AbsoluteLayout>"), "AbsoluteLayout",
-						null, null),
+				c("AbsoluteLayout", te(2, 1, 2, 1, "<AbsoluteLayout></AbsoluteLayout>"), "AbsoluteLayout", null, null),
 				c("DockLayout", te(2, 1, 2, 1, "<DockLayout></DockLayout>"), "DockLayout", null, null));
 	}
 
@@ -1090,6 +1171,30 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 	}
 
 	@Test
+	public void completionWithUnqualifiedElementFormDefault() throws BadLocationException {
+		String xml = "<f:foo xmlns:f=\"http://foo\"\r\n" + //
+				"	xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\r\n" + //
+				"	xsi:schemaLocation=\"\r\n" + //
+				"		http://foo xsd/foo-unqualified.xsd\">\r\n" + //
+				"	<bar>\r\n" + //
+				"		|";
+		XMLAssert.testCompletionFor(xml, null, "src/test/resources/foo-unqualified.xml", //
+				null, //
+				c("item", te(5, 2, 5, 2, "<item></item>"), "item", null, null));
+	}
+
+	@Test
+	public void completionWithUnqualifiedElementFormDefaultWithCatalog() throws BadLocationException {
+		String xml = "<f:foo xmlns:f=\"http://foo\">\r\n" + //
+				"	<bar>\r\n" + //
+				"		|";
+		XMLAssert.testCompletionFor(xml, "src/test/resources/catalogs/catalog.xml", //
+				"src/test/resources/foo-unqualified.xml", //
+				null, //
+				c("item", te(2, 2, 2, 2, "<item></item>"), "item", null, null));
+	}
+
+	@Test
 	public void generateOnlyStartElementOnElement() throws BadLocationException {
 		// </employee> already exists, completion must generate only <employee>
 
@@ -1132,17 +1237,15 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 				+ //
 				"	<|" + //
 				"</project>";
-		testCompletionFor(xml, c("groupId", te(3, 1, 3, 2, "<groupId></groupId>"), "<groupId",
-				"3.0.0+" + //
-						System.lineSeparator() + //
-						System.lineSeparator() + //
-						"A universally unique identifier for a project. It is normal to use " + //
-						"a fully-qualified package name to distinguish it from other projects with a similar name " + // 
-						"(eg. org.apache.maven)." + //
-						System.lineSeparator() + //
-						System.lineSeparator() + //
-						"Source: maven-4.0.0.xsd",
-				MarkupKind.PLAINTEXT));
+		testCompletionFor(xml, c("groupId", te(3, 1, 3, 2, "<groupId></groupId>"), "<groupId", "3.0.0+" + //
+				System.lineSeparator() + //
+				System.lineSeparator() + //
+				"A universally unique identifier for a project. It is normal to use " + //
+				"a fully-qualified package name to distinguish it from other projects with a similar name " + //
+				"(eg. org.apache.maven)." + //
+				System.lineSeparator() + //
+				System.lineSeparator() + //
+				"Source: maven-4.0.0.xsd", MarkupKind.PLAINTEXT));
 	}
 
 	@Test
@@ -1155,17 +1258,15 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 				"</project>";
 
 		String mavenFileURI = getXMLSchemaFileURI("maven-4.0.0.xsd");
-		testCompletionMarkdownSupportFor(xml, c("groupId", te(3, 1, 3, 2, "<groupId></groupId>"), "<groupId",
-				"3.0.0+" + //
-						System.lineSeparator() + //
-						System.lineSeparator() + //
-						"A universally unique identifier for a project. It is normal to use " + //
-						"a fully-qualified package name to distinguish it from other projects with a similar name " + // 
-						"(eg. `org.apache.maven`)." + //
-						System.lineSeparator() + //
-						System.lineSeparator() + //
-						"Source: [maven-4.0.0.xsd](" + mavenFileURI + ")",
-				MarkupKind.MARKDOWN));
+		testCompletionMarkdownSupportFor(xml, c("groupId", te(3, 1, 3, 2, "<groupId></groupId>"), "<groupId", "3.0.0+" + //
+				System.lineSeparator() + //
+				System.lineSeparator() + //
+				"A universally unique identifier for a project. It is normal to use " + //
+				"a fully-qualified package name to distinguish it from other projects with a similar name " + //
+				"(eg. `org.apache.maven`)." + //
+				System.lineSeparator() + //
+				System.lineSeparator() + //
+				"Source: [maven-4.0.0.xsd](" + mavenFileURI + ")", MarkupKind.MARKDOWN));
 	}
 
 	private static String getXMLSchemaFileURI(String schemaURI) throws MalformedURIException {
@@ -1201,5 +1302,66 @@ public class XMLSchemaCompletionExtensionsTest extends BaseFileTempTest {
 		sharedSettings.getCompletionSettings().setCapabilities(completionCapabilities);
 		XMLAssert.testCompletionFor(new XMLLanguageService(), xml, null, null, fileURI, null, sharedSettings,
 				expectedItems);
+	}
+
+	@Test
+	public void customProtocolNamespaceSchemaLocationCompletionWhenCachingOn() throws BadLocationException {
+
+		URL.setURLStreamHandlerFactory(new URLStreamHandlerFactory() {
+
+			@Override
+			public URLStreamHandler createURLStreamHandler(String protocol) {
+				if ("custom".equals(protocol)) {
+					return new URLStreamHandler() {
+
+						@Override
+						protected URLConnection openConnection(URL u) throws IOException {
+							return XMLSchemaCompletionExtensionsTest.class.getResource(u.getPath()).openConnection();
+						}
+					};
+				}
+				return null;
+			}
+		});
+
+		Consumer<XMLLanguageService> config = service -> {
+			ContentModelManager contentModelManager = service.getComponent(ContentModelManager.class);
+
+			contentModelManager.setUseCache(true);
+
+			service.getResolverExtensionManager().registerResolver(new URIResolverExtension() {
+
+				@Override
+				public String resolve(String baseLocation, String publicId, String systemId) {
+					if ("test://schema/format".equals(publicId)) {
+						return "custom://test/xsd/Format.xsd";
+					}
+					return null;
+				}
+
+			});
+		};
+
+		String xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" + //
+				"<Configuration xmlns=\"test://schema/format\">\r\n" + //
+				"  <ViewDefinitions>\r\n" + //
+				"    <View><|";
+		// Completion only with Name
+		XMLAssert.testCompletionFor(new XMLLanguageService(), xml, (String) null, config,
+				"src/test/resources/Format.xml", 4 + 2 /* CDATA and Comments */, true, c("Name", "<Name></Name>"),
+				c("End with '</Configuration>'", "/Configuration>"),
+				c("End with '</ViewDefinitions>'", "/ViewDefinitions>"), c("End with '</View>'", "/View>"));
+	}
+
+	@Test
+	public void completionWithCatalogAndXSDInclude() throws BadLocationException {
+		String xml = "<document xmlns=\"http://foobar.com/test\">\r\n" + //
+				"	|\r\n" + //
+				"</document>";
+		XMLAssert.testCompletionFor(xml, "src/test/resources/catalogs/include/catalog-include.xml", //
+				"src/test/resources/test.xml", //
+				null, //
+				c("page", te(1, 1, 1, 1, "<page></page>"), "page", null, null));
+
 	}
 }

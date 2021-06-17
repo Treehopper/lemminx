@@ -16,6 +16,7 @@ import java.util.List;
 
 import org.eclipse.lemminx.utils.StringUtils;
 import org.w3c.dom.DOMException;
+import org.w3c.dom.Node;
 import org.w3c.dom.TypeInfo;
 
 /**
@@ -62,6 +63,11 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 		}
 
 		@Override
+		public DOMNode getParentNode() {
+			return DOMAttr.this;
+		}
+
+		@Override
 		public DOMDocument getOwnerDocument() {
 			return getOwnerAttr().getOwnerDocument();
 		}
@@ -80,7 +86,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Node#getNodeType()
 	 */
 	@Override
@@ -90,7 +96,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Node#getNodeName()
 	 */
 	@Override
@@ -100,7 +106,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Attr#getName()
 	 */
 	@Override
@@ -124,7 +130,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Attr#getOwnerElement()
 	 */
 	public DOMElement getOwnerElement() {
@@ -137,7 +143,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 	}
 
 	/*
-	 * 
+	 *
 	 * Returns the attribute's value without quotes.
 	 */
 	@Override
@@ -147,7 +153,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Attr#getSchemaTypeInfo()
 	 */
 	@Override
@@ -157,7 +163,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Attr#getSpecified()
 	 */
 	@Override
@@ -167,7 +173,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Attr#isId()
 	 */
 	@Override
@@ -177,7 +183,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Attr#setValue(java.lang.String)
 	 */
 	@Override
@@ -199,9 +205,9 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/**
 	 * Get original attribute value from the document.
-	 * 
+	 *
 	 * This will include quotations (", ').
-	 * 
+	 *
 	 * @return attribute value with quotations if it had them.
 	 */
 	public String getOriginalValue() {
@@ -226,9 +232,43 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 		return nodeAttrValue != null && offset >= nodeAttrValue.getStart() && offset < nodeAttrValue.getEnd();
 	}
 
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see org.w3c.dom.Node#getPrefix()
+	 */
+	@Override
+	public String getPrefix() {
+		String name = getName();
+		if (name == null) {
+			return null;
+		}
+		String prefix = null;
+		int index = name.indexOf(":"); //$NON-NLS-1$
+		if (index != -1) {
+			prefix = name.substring(0, index);
+		}
+		return prefix;
+	}
+
+	/*
+	 * (non-Javadoc)
+	 *
+	 * @see org.w3c.dom.Node#getNamespaceURI()
+	 */
+	@Override
+	public String getNamespaceURI() {
+		if (ownerElement == null || ownerElement.getNodeType() != Node.ELEMENT_NODE) {
+			return null;
+		}
+		String prefix = getPrefix();
+		// Try to get xmlns attribute from the element
+		return ((DOMElement) ownerElement).getNamespaceURI(prefix);
+	}
+
 	/**
 	 * Returns true if attribute name is a xmlns attribute and false otherwise.
-	 * 
+	 *
 	 * @param attributeName
 	 * @return true if attribute name is a xmlns attribute and false otherwise.
 	 */
@@ -243,7 +283,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 	/**
 	 * Returns true if attribute name is the default xmlns attribute and false
 	 * otherwise.
-	 * 
+	 *
 	 * @param attributeName
 	 * @return true if attribute name is the default xmlns attribute and false
 	 *         otherwise.
@@ -265,9 +305,9 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/**
 	 * Returns the prefix if the given URI matches this attributes value.
-	 * 
+	 *
 	 * If the URI doesnt match, null is returned.
-	 * 
+	 *
 	 * @param uri
 	 * @return
 	 */
@@ -288,7 +328,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 	/**
 	 * Returns true if attribute name is the no default xmlns attribute and false
 	 * otherwise.
-	 * 
+	 *
 	 * @param attributeName
 	 * @return true if attribute name is the no default xmlns attribute and false
 	 *         otherwise.
@@ -303,7 +343,7 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see org.w3c.dom.Node#getNextSibling()
 	 */
 	@Override
@@ -342,23 +382,30 @@ public class DOMAttr extends DOMNode implements org.w3c.dom.Attr {
 
 	@Override
 	public boolean equals(Object obj) {
-		if (this == obj)
+		if (this == obj) {
 			return true;
-		if (obj == null)
+		}
+		if (obj == null) {
 			return false;
-		if (getClass() != obj.getClass())
+		}
+		if (getClass() != obj.getClass()) {
 			return false;
+		}
 		DOMAttr other = (DOMAttr) obj;
 		if (name == null) {
-			if (other.name != null)
+			if (other.name != null) {
 				return false;
-		} else if (!name.equals(other.name))
+			}
+		} else if (!name.equals(other.name)) {
 			return false;
+		}
 		if (quotelessValue == null) {
-			if (other.quotelessValue != null)
+			if (other.quotelessValue != null) {
 				return false;
-		} else if (!quotelessValue.equals(other.quotelessValue))
+			}
+		} else if (!quotelessValue.equals(other.quotelessValue)) {
 			return false;
+		}
 		return true;
 	}
 

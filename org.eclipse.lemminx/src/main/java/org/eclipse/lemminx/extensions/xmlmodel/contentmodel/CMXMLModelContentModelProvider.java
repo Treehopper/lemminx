@@ -11,10 +11,13 @@
 *******************************************************************************/
 package org.eclipse.lemminx.extensions.xmlmodel.contentmodel;
 
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.stream.Collectors;
+import java.util.Collections;
+import java.util.List;
 
 import org.eclipse.lemminx.dom.DOMDocument;
+import org.eclipse.lemminx.dom.XMLModel;
 import org.eclipse.lemminx.extensions.contentmodel.model.CMDocument;
 import org.eclipse.lemminx.extensions.contentmodel.model.ContentModelManager;
 import org.eclipse.lemminx.extensions.contentmodel.model.ContentModelProvider;
@@ -47,9 +50,19 @@ public class CMXMLModelContentModelProvider implements ContentModelProvider {
 	}
 
 	@Override
-	public Collection<String> getSystemIds(DOMDocument xmlDocument, String namespaceURI) {
-		return xmlDocument.getXMLModels().stream().map(node -> node.getHref())
-				.filter(href -> !StringUtils.isEmpty(href)).collect(Collectors.toList());
+	public Collection<Identifier> getIdentifiers(DOMDocument xmlDocument, String namespaceURI) {
+		List<XMLModel> xmlModels = xmlDocument.getXMLModels();
+		if (xmlModels.isEmpty()) {
+			return Collections.emptyList();
+		}
+		Collection<Identifier> identifiers = new ArrayList<>();
+		for (XMLModel xmlModel : xmlModels) {
+			String href = xmlModel.getHref();
+			if (!StringUtils.isEmpty(href)) {
+				identifiers.add(new Identifier(null, href, xmlModel.getHrefNode(), "xml-model"));
+			}
+		}
+		return identifiers;
 	}
 
 	@Override

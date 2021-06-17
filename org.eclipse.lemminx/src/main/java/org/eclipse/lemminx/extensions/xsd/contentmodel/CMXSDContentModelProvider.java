@@ -21,6 +21,7 @@ import org.apache.xerces.xs.XSModel;
 import org.eclipse.lemminx.dom.DOMDocument;
 import org.eclipse.lemminx.dom.NoNamespaceSchemaLocation;
 import org.eclipse.lemminx.dom.SchemaLocation;
+import org.eclipse.lemminx.dom.SchemaLocationHint;
 import org.eclipse.lemminx.extensions.contentmodel.model.CMDocument;
 import org.eclipse.lemminx.extensions.contentmodel.model.ContentModelProvider;
 import org.eclipse.lemminx.uriresolver.CacheResourceDownloadingException;
@@ -55,13 +56,25 @@ public class CMXSDContentModelProvider implements ContentModelProvider {
 	}
 
 	@Override
-	public Collection<String> getSystemIds(DOMDocument xmlDocument, String namespaceURI) {
-		Collection<String> systemIds = new ArrayList<>();
+	public Collection<Identifier> getIdentifiers(DOMDocument xmlDocument, String namespaceURI) {
+		Collection<Identifier> identifiers = new ArrayList<>();
 		SchemaLocation schemaLocation = xmlDocument.getSchemaLocation();
 		if (schemaLocation != null) {
-			String location = schemaLocation.getLocationHint(namespaceURI);
-			if (!StringUtils.isEmpty(location)) {
-				systemIds.add(location);
+			if (namespaceURI == null) {
+				for (SchemaLocationHint locationHint : schemaLocation.getSchemaLocationHints()) {
+					String location = locationHint.getHint();
+					if (!StringUtils.isEmpty(location)) {
+						identifiers.add(new Identifier(null, location, locationHint, "xsi:schemaLocation"));
+					}
+				}
+			} else {
+				SchemaLocationHint locationHint = schemaLocation.getLocationHint(namespaceURI);
+				if (locationHint != null) {
+					String location = locationHint.getHint();
+					if (!StringUtils.isEmpty(location)) {
+						identifiers.add(new Identifier(null, location, locationHint, "xsi:schemaLocation"));
+					}
+				}
 			}
 		} else {
 			NoNamespaceSchemaLocation noNamespaceSchemaLocation = xmlDocument.getNoNamespaceSchemaLocation();
@@ -70,12 +83,14 @@ public class CMXSDContentModelProvider implements ContentModelProvider {
 					// xsi:noNamespaceSchemaLocation doesn't define namespaces
 					String location = noNamespaceSchemaLocation.getLocation();
 					if (!StringUtils.isEmpty(location)) {
-						systemIds.add(location);
+						identifiers.add(
+								new Identifier(null, location, noNamespaceSchemaLocation.getAttr().getNodeAttrValue(),
+										"xsi:noNamespaceSchemaLocation"));
 					}
 				}
 			}
 		}
-		return systemIds;
+		return identifiers;
 	}
 
 	@Override
@@ -94,7 +109,7 @@ public class CMXSDContentModelProvider implements ContentModelProvider {
 		return null;
 	}
 
-	public XSLoaderImpl getLoader() {		
+	public XSLoaderImpl getLoader() {
 		XSLoaderImpl loader = new XSLoaderImpl();
 		loader.setParameter("http://apache.org/xml/properties/internal/entity-resolver", resolverExtensionManager);
 		loader.setParameter(Constants.DOM_ERROR_HANDLER, new DOMErrorHandler() {

@@ -28,6 +28,8 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import com.google.gson.JsonPrimitive;
+
 import org.eclipse.lemminx.client.ExtendedClientCapabilities;
 import org.eclipse.lemminx.client.LimitExceededWarner;
 import org.eclipse.lemminx.client.LimitFeature;
@@ -59,6 +61,8 @@ import org.eclipse.lsp4j.Command;
 import org.eclipse.lsp4j.CompletionItem;
 import org.eclipse.lsp4j.CompletionList;
 import org.eclipse.lsp4j.CompletionParams;
+import org.eclipse.lsp4j.ConfigurationItem;
+import org.eclipse.lsp4j.ConfigurationParams;
 import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
@@ -76,11 +80,15 @@ import org.eclipse.lsp4j.FoldingRange;
 import org.eclipse.lsp4j.FoldingRangeRequestParams;
 import org.eclipse.lsp4j.Hover;
 import org.eclipse.lsp4j.HoverParams;
+import org.eclipse.lsp4j.LinkedEditingRangeParams;
+import org.eclipse.lsp4j.LinkedEditingRanges;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.RenameParams;
+import org.eclipse.lsp4j.SelectionRange;
+import org.eclipse.lsp4j.SelectionRangeParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextDocumentClientCapabilities;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
@@ -89,6 +97,7 @@ import org.eclipse.lsp4j.TypeDefinitionParams;
 import org.eclipse.lsp4j.WorkspaceEdit;
 import org.eclipse.lsp4j.jsonrpc.CancelChecker;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.eclipse.lsp4j.jsonrpc.validation.NonNull;
 import org.eclipse.lsp4j.services.TextDocumentService;
 
 /**
@@ -158,22 +167,29 @@ public class XMLTextDocumentService implements TextDocumentService {
 
 	public void updateClientCapabilities(ClientCapabilities capabilities,
 			ExtendedClientCapabilities extendedClientCapabilities) {
-		TextDocumentClientCapabilities textDocumentClientCapabilities = capabilities.getTextDocument();
-		if (textDocumentClientCapabilities != null) {
-			sharedSettings.getCompletionSettings().setCapabilities(textDocumentClientCapabilities.getCompletion());
-			sharedSettings.getFoldingSettings().setCapabilities(textDocumentClientCapabilities.getFoldingRange());
-			sharedSettings.getHoverSettings().setCapabilities(textDocumentClientCapabilities.getHover());
-			codeActionLiteralSupport = textDocumentClientCapabilities.getCodeAction() != null
-					&& textDocumentClientCapabilities.getCodeAction().getCodeActionLiteralSupport() != null;
-			hierarchicalDocumentSymbolSupport = textDocumentClientCapabilities.getDocumentSymbol() != null
-					&& textDocumentClientCapabilities.getDocumentSymbol().getHierarchicalDocumentSymbolSupport() != null
-					&& textDocumentClientCapabilities.getDocumentSymbol().getHierarchicalDocumentSymbolSupport();
-			definitionLinkSupport = textDocumentClientCapabilities.getDefinition() != null
-					&& textDocumentClientCapabilities.getDefinition().getLinkSupport() != null
-					&& textDocumentClientCapabilities.getDefinition().getLinkSupport();
-			typeDefinitionLinkSupport = textDocumentClientCapabilities.getTypeDefinition() != null
-					&& textDocumentClientCapabilities.getTypeDefinition().getLinkSupport() != null
-					&& textDocumentClientCapabilities.getTypeDefinition().getLinkSupport();
+		if (capabilities != null) {
+			TextDocumentClientCapabilities textDocumentClientCapabilities = capabilities.getTextDocument();
+			if (textDocumentClientCapabilities != null) {
+				sharedSettings.getCompletionSettings().setCapabilities(textDocumentClientCapabilities.getCompletion());
+				sharedSettings.getFoldingSettings().setCapabilities(textDocumentClientCapabilities.getFoldingRange());
+				sharedSettings.getHoverSettings().setCapabilities(textDocumentClientCapabilities.getHover());
+				sharedSettings.getValidationSettings()
+						.setCapabilities(textDocumentClientCapabilities.getPublishDiagnostics());
+				codeActionLiteralSupport = textDocumentClientCapabilities.getCodeAction() != null
+						&& textDocumentClientCapabilities.getCodeAction().getCodeActionLiteralSupport() != null;
+				hierarchicalDocumentSymbolSupport = textDocumentClientCapabilities.getDocumentSymbol() != null
+						&& textDocumentClientCapabilities.getDocumentSymbol()
+								.getHierarchicalDocumentSymbolSupport() != null
+						&& textDocumentClientCapabilities.getDocumentSymbol().getHierarchicalDocumentSymbolSupport();
+				definitionLinkSupport = textDocumentClientCapabilities.getDefinition() != null
+						&& textDocumentClientCapabilities.getDefinition().getLinkSupport() != null
+						&& textDocumentClientCapabilities.getDefinition().getLinkSupport();
+				typeDefinitionLinkSupport = textDocumentClientCapabilities.getTypeDefinition() != null
+						&& textDocumentClientCapabilities.getTypeDefinition().getLinkSupport() != null
+						&& textDocumentClientCapabilities.getTypeDefinition().getLinkSupport();
+			}
+			// Workspace settings
+			sharedSettings.getWorkspaceSettings().setCapabilities(capabilities.getWorkspace());
 		}
 		if (extendedClientCapabilities != null) {
 			// Extended client capabilities
@@ -182,8 +198,7 @@ public class XMLTextDocumentService implements TextDocumentService {
 					.setActionableNotificationSupport(extendedClientCapabilities.isActionableNotificationSupport());
 			sharedSettings.setOpenSettingsCommandSupport(extendedClientCapabilities.isOpenSettingsCommandSupport());
 		}
-		// Workspace settings
-		sharedSettings.getWorkspaceSettings().setCapabilities(capabilities.getWorkspace());
+
 	}
 
 	@Override
@@ -202,10 +217,35 @@ public class XMLTextDocumentService implements TextDocumentService {
 		});
 	}
 
-	private XMLFormattingOptions getFormattingSettings(String uri) {
-		// TODO: manage formattings per document URI (to support .editorconfig for
-		// instance).
-		return sharedSettings.getFormattingSettings();
+	/**
+	 * Returns the indentation settings (`xml.format.tabSize` and
+	 * `xml.format.insertSpaces`) for the document with the given URI.
+	 *
+	 * @param uri the uri of the document to get the indentation settings for
+	 * @return the indentation settings (`xml.format.tabSize` and
+	 *         `xml.format.insertSpaces`) for the document with the given URI
+	 */
+	private CompletableFuture<XMLFormattingOptions> getIndentationSettings(@NonNull String uri) {
+		ConfigurationItem insertSpaces = new ConfigurationItem();
+		insertSpaces.setScopeUri(uri);
+		insertSpaces.setSection("xml.format.insertSpaces");
+
+		ConfigurationItem tabSize = new ConfigurationItem();
+		tabSize.setScopeUri(uri);
+		tabSize.setSection("xml.format.tabSize");
+
+		return xmlLanguageServer.getLanguageClient().configuration(new ConfigurationParams(Arrays.asList( //
+				insertSpaces, tabSize //
+		))).thenApply(indentationSettings -> {
+			XMLFormattingOptions newOptions = new XMLFormattingOptions();
+			if (indentationSettings.get(0) != null) {
+				newOptions.setInsertSpaces(((JsonPrimitive) indentationSettings.get(0)).getAsBoolean());
+			}
+			if (indentationSettings.get(1) != null) {
+				newOptions.setTabSize(((JsonPrimitive) indentationSettings.get(1)).getAsInt());
+			}
+			return newOptions;
+		});
 	}
 
 	@Override
@@ -220,6 +260,9 @@ public class XMLTextDocumentService implements TextDocumentService {
 			DocumentSymbolParams params) {
 
 		TextDocument document = getDocument(params.getTextDocument().getUri());
+		if (document == null) {
+			return CompletableFuture.completedFuture(null);
+		}
 		XMLSymbolSettings symbolSettings = sharedSettings.getSymbolSettings();
 
 		if (!symbolSettings.isEnabled() || symbolSettings.isExcluded(document.getUri())) {
@@ -241,17 +284,17 @@ public class XMLTextDocumentService implements TextDocumentService {
 							return e;
 						}) //
 						.collect(Collectors.toList());
+			} else {
+				SymbolInformationResult result = getXMLLanguageService().findSymbolInformations(xmlDocument,
+						symbolSettings, cancelChecker);
+				resultLimitExceeded = result.isResultLimitExceeded();
+				symbols = result.stream() //
+						.map(s -> {
+							Either<SymbolInformation, DocumentSymbol> e = Either.forLeft(s);
+							return e;
+						}) //
+						.collect(Collectors.toList());
 			}
-			SymbolInformationResult result = getXMLLanguageService().findSymbolInformations(xmlDocument, symbolSettings,
-					cancelChecker);
-			resultLimitExceeded = result.isResultLimitExceeded();
-			symbols = result.stream() //
-					.map(s -> {
-						Either<SymbolInformation, DocumentSymbol> e = Either.forLeft(s);
-						return e;
-					}) //
-					.collect(Collectors.toList());
-
 			if (resultLimitExceeded) {
 				// send warning
 				getLimitExceededWarner().onResultLimitExceeded(xmlDocument.getTextDocument().getUri(),
@@ -266,6 +309,9 @@ public class XMLTextDocumentService implements TextDocumentService {
 		return computeAsync((cancelChecker) -> {
 			String uri = params.getTextDocument().getUri();
 			TextDocument document = getDocument(uri);
+			if (document == null) {
+				return null;
+			}
 			CompositeSettings settings = new CompositeSettings(getSharedSettings(), params.getOptions());
 			return getXMLLanguageService().format(document, null, settings);
 		});
@@ -276,6 +322,9 @@ public class XMLTextDocumentService implements TextDocumentService {
 		return computeAsync((cancelChecker) -> {
 			String uri = params.getTextDocument().getUri();
 			TextDocument document = getDocument(uri);
+			if (document == null) {
+				return null;
+			}
 			CompositeSettings settings = new CompositeSettings(getSharedSettings(), params.getOptions());
 			return getXMLLanguageService().format(document, params.getRange(), settings);
 		});
@@ -383,24 +432,47 @@ public class XMLTextDocumentService implements TextDocumentService {
 
 	@Override
 	public CompletableFuture<List<Either<Command, CodeAction>>> codeAction(CodeActionParams params) {
+		String uri = params.getTextDocument().getUri();
+		return getIndentationSettings(uri) //
+				.handle((XMLFormattingOptions indentationSettings, Throwable err) -> {
+					if (indentationSettings != null) {
+						sharedSettings.getFormattingSettings().merge(indentationSettings);
+					}
+					return null;
+				}) //
+				.thenCombine(computeDOMAsync(params.getTextDocument(), (cancelChecker, xmlDocument) -> {
+					return xmlDocument;
+				}), (void_, xmlDocument) -> {
+					return (List<Either<Command, CodeAction>>) getXMLLanguageService()
+							.doCodeActions(params.getContext(), params.getRange(), xmlDocument, sharedSettings) //
+							.stream() //
+							.map(ca -> {
+								if (codeActionLiteralSupport) {
+									Either<Command, CodeAction> e = Either.forRight(ca);
+									return e;
+								} else {
+									List<Object> arguments = Arrays.asList(uri,
+											xmlDocument.getTextDocument().getVersion(),
+											ca.getEdit().getDocumentChanges().get(0).getLeft().getEdits());
+									Command command = new Command(ca.getTitle(), "_xml.applyCodeAction", arguments);
+									Either<Command, CodeAction> e = Either.forLeft(command);
+									return e;
+								}
+							}) //
+							.collect(Collectors.toList());
+				});
+	}
+
+	@Override
+	public CompletableFuture<List<SelectionRange>> selectionRange(SelectionRangeParams params) {
 		return computeDOMAsync(params.getTextDocument(), (cancelChecker, xmlDocument) -> {
-			String uri = params.getTextDocument().getUri();
-			return getXMLLanguageService()
-					.doCodeActions(params.getContext(), params.getRange(), xmlDocument, sharedSettings) //
-					.stream() //
-					.map(ca -> {
-						if (codeActionLiteralSupport) {
-							Either<Command, CodeAction> e = Either.forRight(ca);
-							return e;
-						} else {
-							List<Object> arguments = Arrays.asList(uri, xmlDocument.getTextDocument().getVersion(),
-									ca.getEdit().getDocumentChanges().get(0).getLeft().getEdits());
-							Command command = new Command(ca.getTitle(), "_xml.applyCodeAction", arguments);
-							Either<Command, CodeAction> e = Either.forLeft(command);
-							return e;
-						}
-					}) //
-					.collect(Collectors.toList());
+			return getXMLLanguageService().getSelectionRanges(xmlDocument, params.getPositions(), cancelChecker);
+		});
+	}
+
+	public CompletableFuture<LinkedEditingRanges> linkedEditingRange(LinkedEditingRangeParams params) {
+		return computeDOMAsync(params.getTextDocument(), (cancelChecker, xmlDocument) -> {
+			return getXMLLanguageService().findLinkedEditingRanges(xmlDocument, params.getPosition(), cancelChecker);
 		});
 	}
 
@@ -416,7 +488,7 @@ public class XMLTextDocumentService implements TextDocumentService {
 
 	/**
 	 * Update settings of the language service.
-	 * 
+	 *
 	 * @param settings
 	 */
 	public void updateSettings(Object settings) {
@@ -431,7 +503,7 @@ public class XMLTextDocumentService implements TextDocumentService {
 
 	/**
 	 * Save settings or XML file.
-	 * 
+	 *
 	 * @param context
 	 */
 	void doSave(SaveContext context) {
@@ -460,7 +532,7 @@ public class XMLTextDocumentService implements TextDocumentService {
 		});
 	}
 
-	private void validate(DOMDocument xmlDocument) throws CancellationException {
+	void validate(DOMDocument xmlDocument) throws CancellationException {
 		CancelChecker cancelChecker = xmlDocument.getCancelChecker();
 		cancelChecker.checkCanceled();
 		getXMLLanguageService().publishDiagnostics(xmlDocument,
@@ -518,12 +590,16 @@ public class XMLTextDocumentService implements TextDocumentService {
 
 	/**
 	 * Returns the text document from the given uri.
-	 * 
+	 *
 	 * @param uri the uri
 	 * @return the text document from the given uri.
 	 */
 	public ModelTextDocument<DOMDocument> getDocument(String uri) {
 		return documents.get(uri);
+	}
+
+	public Collection<ModelTextDocument<DOMDocument>> allDocuments() {
+		return documents.all();
 	}
 
 	public boolean documentIsOpen(String uri) {
@@ -534,7 +610,7 @@ public class XMLTextDocumentService implements TextDocumentService {
 	/**
 	 * Compute the DOM Document for a given uri in a future and then apply the given
 	 * function.
-	 * 
+	 *
 	 * @param <R>
 	 * @param documentIdentifier the document indetifier.
 	 * @param code               a bi function that accepts a {@link CancelChecker}
@@ -545,7 +621,11 @@ public class XMLTextDocumentService implements TextDocumentService {
 	 */
 	public <R> CompletableFuture<R> computeDOMAsync(TextDocumentIdentifier documentIdentifier,
 			BiFunction<CancelChecker, DOMDocument, R> code) {
-		return computeModelAsync(getDocument(documentIdentifier.getUri()).getModel(), code);
+		ModelTextDocument<DOMDocument> document = getDocument(documentIdentifier.getUri());
+		if (document != null) {
+			return computeModelAsync(document.getModel(), code);
+		}
+		return CompletableFuture.completedFuture(null);
 	}
 
 	private static <R, M> CompletableFuture<R> computeModelAsync(CompletableFuture<M> loadModel,
@@ -562,8 +642,7 @@ public class XMLTextDocumentService implements TextDocumentService {
 
 	public LimitExceededWarner getLimitExceededWarner() {
 		if (this.limitExceededWarner == null) {
-			this.limitExceededWarner =
-					new LimitExceededWarner(this.xmlLanguageServer);
+			this.limitExceededWarner = new LimitExceededWarner(this.xmlLanguageServer);
 		}
 		return this.limitExceededWarner;
 	}

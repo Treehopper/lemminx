@@ -13,6 +13,7 @@
 package org.eclipse.lemminx.services.extensions;
 
 import static org.eclipse.lemminx.XMLAssert.c;
+import static org.eclipse.lemminx.XMLAssert.r;
 
 import org.eclipse.lemminx.XMLAssert;
 import org.eclipse.lemminx.commons.BadLocationException;
@@ -22,6 +23,7 @@ import org.eclipse.lsp4j.CompletionItemKind;
 import org.eclipse.lsp4j.InsertTextFormat;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.jsonrpc.CancelChecker;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.junit.jupiter.api.Test;
 
@@ -120,6 +122,20 @@ public class HTMLCompletionExtensionsTest {
 				c("checkbox", "\"checkbox\"" /* "<input type=\"checkbox\"" */));
 	}
 
+	@Test
+	public void testHTMLOnXMLContentCompletion() throws BadLocationException {		
+		testCompletionFor("<input>|</input>", //
+				c("Test replace range", "replacement text", r(0, 7, 0, 7), null));
+		testCompletionFor("<input> |</input>", //
+				c("Test replace range", "replacement text", r(0, 7, 0, 8), null));
+		testCompletionFor("<input>| </input>", //
+				c("Test replace range", "replacement text", r(0, 7, 0, 8), null));
+		testCompletionFor("<input>some extisti|ng text</input>", //
+				c("Test replace range", "replacement text", r(0, 7, 0, 26), null));
+		testCompletionFor("<input>some extisti|ng <br/>text</input>", //
+				c("Test replace range", "replacement text", r(0, 7, 0, 22), null));
+	}
+
 	public static void testCompletionFor(String value, CompletionItem... expectedItems) throws BadLocationException {
 		XMLAssert.testCompletionFor(new HTMLLanguageService(), value, (String) null, null, null, null, true,
 				expectedItems);
@@ -134,7 +150,7 @@ public class HTMLCompletionExtensionsTest {
 		class HTMLCompletionParticipant extends CompletionParticipantAdapter {
 
 			@Override
-			public void onTagOpen(ICompletionRequest completionRequest, ICompletionResponse completionResponse)
+			public void onTagOpen(ICompletionRequest completionRequest, ICompletionResponse completionResponse, CancelChecker cancelChecker)
 					throws Exception {
 				Range range = completionRequest.getReplaceRange();
 				HTMLTag.HTML_TAGS.forEach(t -> {
@@ -145,7 +161,7 @@ public class HTMLCompletionExtensionsTest {
 					item.setFilterText(completionRequest.getFilterForStartTagName(tag));
 					item.setKind(CompletionItemKind.Property);
 					item.setDocumentation(Either.forLeft(label));
-					item.setTextEdit(new TextEdit(range, "<" + tag + "/>"));
+					item.setTextEdit(Either.forLeft(new TextEdit(range, "<" + tag + "/>")));
 					item.setInsertTextFormat(InsertTextFormat.PlainText);
 					completionResponse.addCompletionItem(item);
 				});
@@ -153,7 +169,7 @@ public class HTMLCompletionExtensionsTest {
 
 			@Override
 			public void onAttributeName(boolean generateValue, ICompletionRequest completionRequest,
-					ICompletionResponse completionResponse) {
+					ICompletionResponse completionResponse, CancelChecker cancelChecker) {
 				String tag = completionRequest.getCurrentTag();
 				HTMLTag htmlTag = HTMLTag.getHTMLTag(tag);
 				if (htmlTag != null) {
@@ -170,7 +186,7 @@ public class HTMLCompletionExtensionsTest {
 								item.setLabel(attribute);
 								item.setKind(CompletionItemKind.Value);
 								String value = generateValue ? "=\"$1\"" : "";
-								item.setTextEdit(new TextEdit(replaceRange, attribute + value));
+								item.setTextEdit(Either.forLeft(new TextEdit(replaceRange, attribute + value)));
 								item.setInsertTextFormat(InsertTextFormat.Snippet);
 								completionResponse.addCompletionAttribute(item);
 							}
@@ -180,8 +196,8 @@ public class HTMLCompletionExtensionsTest {
 			}
 
 			@Override
-			public void onAttributeValue(String valuePrefix,
-					ICompletionRequest completionRequest, ICompletionResponse completionResponse) {
+			public void onAttributeValue(String valuePrefix, ICompletionRequest completionRequest,
+					ICompletionResponse completionResponse, CancelChecker cancelChecker) {
 				String tag = completionRequest.getCurrentTag();
 				String attributeName = completionRequest.getCurrentAttributeName();
 				HTMLTag htmlTag = HTMLTag.getHTMLTag(tag);
@@ -201,12 +217,12 @@ public class HTMLCompletionExtensionsTest {
 								String[] values = HTMLTag.getAttributeValues(attrType);
 								for (String value : values) {
 									String insertText = completionRequest.getInsertAttrValue(value);
-									
+
 									CompletionItem item = new CompletionItem();
 									item.setLabel(value);
 									item.setFilterText(insertText);
 									item.setKind(CompletionItemKind.Unit);
-									item.setTextEdit(new TextEdit(fullRange, insertText));
+									item.setTextEdit(Either.forLeft(new TextEdit(fullRange, insertText)));
 									item.setInsertTextFormat(InsertTextFormat.PlainText);
 									completionResponse.addCompletionAttribute(item);
 								}
@@ -215,6 +231,16 @@ public class HTMLCompletionExtensionsTest {
 						}
 					}
 				}
+			}
+
+			@Override
+			public void onXMLContent(ICompletionRequest request, ICompletionResponse response, CancelChecker cancelChecker) {
+				CompletionItem completion = new CompletionItem("Test replace range");
+				TextEdit edit = new TextEdit();
+				edit.setNewText("replacement text");
+				edit.setRange(request.getReplaceRange());
+				completion.setTextEdit(Either.forLeft(edit));
+				response.addCompletionItem(completion);
 			}
 		}
 	}

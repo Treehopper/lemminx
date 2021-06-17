@@ -156,7 +156,7 @@ public class XMLGenerator {
 
 	private int generate(Collection<CMAttributeDeclaration> attributes, int level, int snippetIndex, XMLBuilder xml,
 			String tagName) {
-		List<CMAttributeDeclaration> requiredAttributes = new ArrayList<CMAttributeDeclaration>();
+		List<CMAttributeDeclaration> requiredAttributes = new ArrayList<>();
 		for (CMAttributeDeclaration att : attributes) {
 			if (att.isRequired()) {
 				requiredAttributes.add(att);
@@ -190,7 +190,7 @@ public class XMLGenerator {
 		StringBuilder value = new StringBuilder();
 		String quotation = sharedSettings.getPreferences().getQuotationAsString();
 		if (withQuote) {
-			value.append("=" + quotation);
+			value.append("=").append(quotation);
 		}
 		if (!canSupportSnippets) {
 			if (defaultValue != null) {
@@ -297,7 +297,7 @@ public class XMLGenerator {
 	 */
 	public static MarkupContent createMarkupContent(CMAttributeDeclaration cmAttribute,
 			CMElementDeclaration ownerElement, ISharedSettingsRequest request) {
-		String documentation = XMLGenerator.generateDocumentation(cmAttribute.getDocumentation(request),
+		String documentation = XMLGenerator.generateDocumentation(cmAttribute.getAttributeNameDocumentation(request),
 				ownerElement.getDocumentURI(), request.canSupportMarkupKind(MarkupKind.MARKDOWN));
 		if (documentation != null) {
 			return MarkupContentFactory.createMarkupContent(documentation, MarkupKind.MARKDOWN, request);
@@ -318,7 +318,7 @@ public class XMLGenerator {
 	 */
 	public static MarkupContent createMarkupContent(CMAttributeDeclaration cmAttribute, String attributeValue,
 			CMElementDeclaration ownerElement, ISharedSettingsRequest support) {
-		String documentation = XMLGenerator.generateDocumentation(cmAttribute.getValueDocumentation(attributeValue, support),
+		String documentation = XMLGenerator.generateDocumentation(cmAttribute.getAttributeValueDocumentation(attributeValue, support),
 				ownerElement.getDocumentURI(), support.canSupportMarkupKind(MarkupKind.MARKDOWN));
 		if (documentation != null) {
 			return MarkupContentFactory.createMarkupContent(documentation, MarkupKind.MARKDOWN, support);
@@ -337,7 +337,7 @@ public class XMLGenerator {
 	 */
 	public static MarkupContent createMarkupContent(CMElementDeclaration cmElement, String textContent,
 			ISharedSettingsRequest support) {
-		String documentation = XMLGenerator.generateDocumentation(cmElement.getValueDocumentation(textContent),
+		String documentation = XMLGenerator.generateDocumentation(cmElement.getTextDocumentation(textContent, support),
 				cmElement.getDocumentURI(), support.canSupportMarkupKind(MarkupKind.MARKDOWN));
 		if (documentation != null) {
 			return MarkupContentFactory.createMarkupContent(documentation, MarkupKind.MARKDOWN, support);

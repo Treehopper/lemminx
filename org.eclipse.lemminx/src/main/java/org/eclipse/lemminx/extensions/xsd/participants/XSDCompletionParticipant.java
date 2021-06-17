@@ -28,6 +28,8 @@ import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.MarkupKind;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.TextEdit;
+import org.eclipse.lsp4j.jsonrpc.CancelChecker;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 
 /**
  * XSD completion for
@@ -41,8 +43,8 @@ import org.eclipse.lsp4j.TextEdit;
 public class XSDCompletionParticipant extends CompletionParticipantAdapter {
 
 	@Override
-	public void onAttributeValue(String valuePrefix, ICompletionRequest request, ICompletionResponse response)
-			throws Exception {
+	public void onAttributeValue(String valuePrefix, ICompletionRequest request, ICompletionResponse response,
+			CancelChecker cancelChecker) throws Exception {
 		DOMNode node = request.getNode();
 		DOMDocument document = node.getOwnerDocument();
 		if (!DOMUtils.isXSD(document)) {
@@ -66,7 +68,7 @@ public class XSDCompletionParticipant extends CompletionParticipantAdapter {
 						item.setLabel(value);
 						item.setKind(CompletionItemKind.Value);
 						item.setFilterText(insertText);
-						item.setTextEdit(new TextEdit(fullRange, insertText));
+						item.setTextEdit(Either.forLeft(new TextEdit(fullRange, insertText)));
 						response.addCompletionItem(item);
 					});
 			if (bindingType.isSimple()) {
@@ -82,7 +84,7 @@ public class XSDCompletionParticipant extends CompletionParticipantAdapter {
 					item.setLabel(value);
 					item.setKind(CompletionItemKind.Value);
 					item.setFilterText(insertText);
-					item.setTextEdit(new TextEdit(fullRange, insertText));
+					item.setTextEdit(Either.forLeft(new TextEdit(fullRange, insertText)));
 					response.addCompletionItem(item);
 				});
 			}

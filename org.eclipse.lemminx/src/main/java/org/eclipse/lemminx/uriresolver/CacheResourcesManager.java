@@ -27,23 +27,31 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.eclipse.lemminx.utils.FilesUtils;
-import org.eclipse.lemminx.utils.URIUtils;
+import org.eclipse.lemminx.utils.StringUtils;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.io.MoreFiles;
+import com.google.common.io.RecursiveDeleteOption;
 
 /**
  * Cache resources manager.
  *
  */
 public class CacheResourcesManager {
+
+	private static final String USER_AGENT_KEY = "User-Agent";
+	private static final String USER_AGENT_VALUE = "LemMinX";
+
 	protected final Cache<String, Boolean> unavailableURICache;
 
 	private static final String CACHE_PATH = "cache";
@@ -51,6 +59,8 @@ public class CacheResourcesManager {
 
 	private final Map<String, CompletableFuture<Path>> resourcesLoading;
 	private boolean useCache;
+
+	private final Set<String> protocolsForCahe;
 
 	class ResourceInfo {
 
@@ -60,15 +70,34 @@ public class CacheResourcesManager {
 
 	}
 
+	/**
+	 * Classpath resource to deploy into the lemminx cache
+	 */
 	public static class ResourceToDeploy {
 
 		private final Path resourceCachePath;
 		private final String resourceFromClasspath;
 
+		/**
+		 * @param resourceURI           - used to compute the path to deploy the
+		 *                              resource to in the lemminx cache. Generally this
+		 *                              is the URL to the resource. Ex.
+		 *                              https://www.w3.org/2007/schema-for-xslt20.xsd
+		 * @param resourceFromClasspath - the classpath location of the resource to
+		 *                              deploy to the lemminx cache
+		 */
 		public ResourceToDeploy(String resourceURI, String resourceFromClasspath) {
 			this(URI.create(resourceURI), resourceFromClasspath);
 		}
 
+		/**
+		 * @param resourceURI           - used to compute the path to deploy the
+		 *                              resource to in the lemminx cache. Generally this
+		 *                              is the URL to the resource. Ex.
+		 *                              https://www.w3.org/2007/schema-for-xslt20.xsd
+		 * @param resourceFromClasspath - the classpath location of the resource to
+		 *                              deploy to the lemminx cache
+		 */
 		public ResourceToDeploy(URI resourceURI, String resourceFromClasspath) {
 			this.resourceCachePath = Paths.get(CACHE_PATH, resourceURI.getScheme(), resourceURI.getHost(),
 					resourceURI.getPath());
@@ -76,10 +105,17 @@ public class CacheResourcesManager {
 					: "/" + resourceFromClasspath;
 		}
 
+		/**
+		 * @return The computed path in the lemmix cache that the resource will be
+		 *         stored at
+		 */
 		public Path getDeployedPath() throws IOException {
 			return FilesUtils.getDeployedPath(resourceCachePath);
 		}
 
+		/**
+		 * @return The path to the resource on the classpath
+		 */
 		public String getResourceFromClasspath() {
 			return resourceFromClasspath;
 		}
@@ -91,7 +127,9 @@ public class CacheResourcesManager {
 
 	public CacheResourcesManager(Cache<String, Boolean> cache) {
 		resourcesLoading = new HashMap<>();
+		protocolsForCahe = new HashSet<>();
 		unavailableURICache = cache;
+		addDefaultProtocolsForCache();
 	}
 
 	public Path getResource(final String resourceURI) throws IOException {
@@ -133,6 +171,7 @@ public class CacheResourcesManager {
 				String actualURI = resourceURI;
 				URL url = new URL(actualURI);
 				conn = url.openConnection();
+				conn.setRequestProperty(USER_AGENT_KEY, USER_AGENT_VALUE);
 				/* XXX: This should really be implemented using HttpClient or similar */
 				int allowedRedirects = 5;
 				while (conn.getHeaderField("Location") != null && allowedRedirects > 0) //$NON-NLS-1$
@@ -140,6 +179,7 @@ public class CacheResourcesManager {
 					allowedRedirects--;
 					url = new URL(actualURI = conn.getHeaderField("Location")); //$NON-NLS-1$
 					conn = url.openConnection();
+					conn.setRequestProperty(USER_AGENT_KEY, USER_AGENT_VALUE);
 				}
 
 				// Download resource in a temporary file
@@ -184,7 +224,9 @@ public class CacheResourcesManager {
 	}
 
 	public static Path getResourceCachePath(URI uri) throws IOException {
-		Path resourceCachePath = Paths.get(CACHE_PATH, uri.getScheme(), uri.getHost(), uri.getPath());
+		Path resourceCachePath = uri.getPort() > 0
+				? Paths.get(CACHE_PATH, uri.getScheme(), uri.getHost(), String.valueOf(uri.getPort()), uri.getPath())
+				: Paths.get(CACHE_PATH, uri.getScheme(), uri.getHost(), uri.getPath());
 		return FilesUtils.getDeployedPath(resourceCachePath);
 	}
 
@@ -192,9 +234,9 @@ public class CacheResourcesManager {
 	 * Try to get the cached {@link ResourceToDeploy#resourceCachePath} in cache
 	 * file system and if it is not found, create the file with the given content of
 	 * {@link ResourceToDeploy#resourceFromClasspath} stored in classpath.
-	 * 
+	 *
 	 * @param resource the resource to deploy if needed.
-	 * 
+	 *
 	 * @return the cached {@link ResourceToDeploy#resourceCachePath} in cache file
 	 *         system.
 	 * @throws IOException
@@ -213,18 +255,18 @@ public class CacheResourcesManager {
 	/**
 	 * Returns <code>true</code> if cache is enabled and url comes from "http(s)" or
 	 * "ftp" and <code>false</code> otherwise.
-	 * 
+	 *
 	 * @param url
 	 * @return <code>true</code> if cache is enabled and url comes from "http(s)" or
 	 *         "ftp" and <code>false</code> otherwise.
 	 */
 	public boolean canUseCache(String url) {
-		return isUseCache() && URIUtils.isRemoteResource(url);
+		return isUseCache() && isUseCacheFor(url);
 	}
 
 	/**
 	 * Set <code>true</code> if cache must be used, <code>false</code> otherwise.
-	 * 
+	 *
 	 * @param useCache <code>true</code> if cache must be used, <code>false</code>
 	 *                 otherwise.
 	 */
@@ -235,11 +277,88 @@ public class CacheResourcesManager {
 	/**
 	 * Returns <code>true</code> if cache must be used, <code>false</code>
 	 * otherwise.
-	 * 
+	 *
 	 * @return <code>true</code> if cache must be used, <code>false</code>
 	 *         otherwise.
 	 */
 	public boolean isUseCache() {
 		return useCache;
 	}
+
+	/**
+	 * Remove the cache directory (.lemminx/cache) if it exists.
+	 *
+	 * @throws IOException if the delete of directory (.lemminx/cache) cannot be
+	 *                     done.
+	 */
+	public void evictCache() throws IOException {
+		// Get the cache directory path
+		Path cachePath = FilesUtils.getDeployedPath(Paths.get(CACHE_PATH));
+		if (Files.exists(cachePath)) {
+			// Remove the cache directory
+			MoreFiles.deleteDirectoryContents(cachePath, RecursiveDeleteOption.ALLOW_INSECURE);
+		}
+	}
+
+	/**
+	 * Add protocol for using cache when url will start with the given protocol.
+	 *
+	 * @param protocol the protocol to add.
+	 */
+	public void addProtocolForCahe(String protocol) {
+		protocolsForCahe.add(formatProtocol(protocol));
+	}
+
+	/**
+	 * Remove protocol to avoid using cache when url will start with the given
+	 * protocol.
+	 *
+	 * @param protocol the protocol to remove.
+	 */
+	public void removeProtocolForCahe(String protocol) {
+		protocolsForCahe.remove(formatProtocol(protocol));
+	}
+
+	/**
+	 * Add ':' separator if the given protocol doesn't contain it.
+	 *
+	 * @param protocol the protocol to format.
+	 *
+	 * @return the protocol concat with ':'.
+	 */
+	private static String formatProtocol(String protocol) {
+		if (!protocol.endsWith(":")) {
+			return protocol + ":";
+		}
+		return protocol;
+	}
+
+	/**
+	 * Returns true if the cache must be used for the given url and false otherwise.
+	 *
+	 * @param url the url.
+	 *
+	 * @return true if the cache must be used for the given url and false otherwise.
+	 */
+	private boolean isUseCacheFor(String url) {
+		if (StringUtils.isEmpty(url)) {
+			return false;
+		}
+		for (String protocol : protocolsForCahe) {
+			if (url.startsWith(protocol)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Add http, https, ftp protocol to use cache.
+	 */
+	private void addDefaultProtocolsForCache() {
+		addProtocolForCahe("http");
+		addProtocolForCahe("https");
+		addProtocolForCahe("ftp");
+	}
+
 }

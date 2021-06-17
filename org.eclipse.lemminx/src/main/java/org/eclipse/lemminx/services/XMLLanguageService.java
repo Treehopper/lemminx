@@ -27,6 +27,7 @@ import org.eclipse.lemminx.extensions.contentmodel.settings.XMLValidationSetting
 import org.eclipse.lemminx.services.extensions.XMLExtensionsRegistry;
 import org.eclipse.lemminx.settings.SharedSettings;
 import org.eclipse.lemminx.settings.XMLCodeLensSettings;
+import org.eclipse.lemminx.settings.XMLCompletionSettings;
 import org.eclipse.lemminx.settings.XMLFoldingSettings;
 import org.eclipse.lemminx.settings.XMLSymbolSettings;
 import org.eclipse.lemminx.uriresolver.CacheResourceDownloadingException;
@@ -42,12 +43,14 @@ import org.eclipse.lsp4j.DocumentLink;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.FoldingRange;
 import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.LinkedEditingRanges;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.ReferenceContext;
+import org.eclipse.lsp4j.SelectionRange;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.WorkspaceEdit;
@@ -58,6 +61,8 @@ import org.eclipse.lsp4j.jsonrpc.CancelChecker;
  *
  */
 public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFullFormatter {
+
+	private static final String XML_DIAGNOSTIC_SOURCE = "xml";
 
 	private static final CancelChecker NULL_CHECKER = new CancelChecker() {
 
@@ -81,9 +86,11 @@ public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFul
 	private final XMLCodeLens codelens;
 	private final XMLCodeActions codeActions;
 	private final XMLRename rename;
+	private final XMLSelectionRanges selectionRanges;
+	private final XMLLinkedEditing linkedEditing;
 
 	public XMLLanguageService() {
-		this.formatter = new XMLFormatter();
+		this.formatter = new XMLFormatter(this);
 		this.highlighting = new XMLHighlighting(this);
 		this.symbolsProvider = new XMLSymbolsProvider(this);
 		this.completions = new XMLCompletions(this);
@@ -97,6 +104,8 @@ public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFul
 		this.codelens = new XMLCodeLens(this);
 		this.codeActions = new XMLCodeActions(this);
 		this.rename = new XMLRename(this);
+		this.selectionRanges = new XMLSelectionRanges();
+		this.linkedEditing = new XMLLinkedEditing();
 	}
 
 	@Override
@@ -154,19 +163,19 @@ public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFul
 		return hover.doHover(xmlDocument, position, sharedSettings, cancelChecker);
 	}
 
-	public List<Diagnostic> doDiagnostics(DOMDocument xmlDocument, CancelChecker monitor,
-			XMLValidationSettings validationSettings) {
-		return diagnostics.doDiagnostics(xmlDocument, monitor, validationSettings);
+	public List<Diagnostic> doDiagnostics(DOMDocument xmlDocument, XMLValidationSettings validationSettings,
+			CancelChecker cancelChecker) {
+		return diagnostics.doDiagnostics(xmlDocument, validationSettings, cancelChecker);
 	}
 
 	public CompletableFuture<Path> publishDiagnostics(DOMDocument xmlDocument,
 			Consumer<PublishDiagnosticsParams> publishDiagnostics, Consumer<TextDocument> triggerValidation,
-			XMLValidationSettings validationSettings, CancelChecker monitor) {
+			XMLValidationSettings validationSettings, CancelChecker cancelChecker) {
 		String uri = xmlDocument.getDocumentURI();
 		TextDocument document = xmlDocument.getTextDocument();
 		try {
-			List<Diagnostic> diagnostics = this.doDiagnostics(xmlDocument, monitor, validationSettings);
-			monitor.checkCanceled();
+			List<Diagnostic> diagnostics = this.doDiagnostics(xmlDocument, validationSettings, cancelChecker);
+			cancelChecker.checkCanceled();
 			publishDiagnostics.accept(new PublishDiagnosticsParams(uri, diagnostics));
 			return null;
 		} catch (CacheResourceDownloadingException e) {
@@ -209,7 +218,7 @@ public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFul
 		DOMElement documentElement = document.getDocumentElement();
 		Range range = XMLPositionUtility.selectStartTagName(documentElement);
 		List<Diagnostic> diagnostics = new ArrayList<>();
-		diagnostics.add(new Diagnostic(range, message, severity, "XML"));
+		diagnostics.add(new Diagnostic(range, message, severity, XML_DIAGNOSTIC_SOURCE));
 		publishDiagnostics.accept(new PublishDiagnosticsParams(uri, diagnostics));
 	}
 
@@ -220,6 +229,11 @@ public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFul
 	public List<FoldingRange> getFoldingRanges(DOMDocument xmlDocument, XMLFoldingSettings context,
 			CancelChecker cancelChecker) {
 		return foldings.getFoldingRanges(xmlDocument.getTextDocument(), context, cancelChecker);
+	}
+
+	public List<SelectionRange> getSelectionRanges(DOMDocument xmlDocument, List<Position> positions,
+			CancelChecker cancelChecker) {
+		return selectionRanges.getSelectionRanges(xmlDocument, positions, cancelChecker);
 	}
 
 	public WorkspaceEdit doRename(DOMDocument xmlDocument, Position position, String newText) {
@@ -255,22 +269,25 @@ public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFul
 		return codeActions.doCodeActions(context, range, document, sharedSettings);
 	}
 
-	public AutoCloseTagResponse doTagComplete(DOMDocument xmlDocument, Position position) {
-		return doTagComplete(xmlDocument, position, NULL_CHECKER);
+	public AutoCloseTagResponse doTagComplete(DOMDocument xmlDocument, XMLCompletionSettings completionSettings,
+			Position position) {
+		return doTagComplete(xmlDocument, position, completionSettings, NULL_CHECKER);
 	}
 
-	public AutoCloseTagResponse doTagComplete(DOMDocument xmlDocument, Position position, CancelChecker cancelChecker) {
-		return completions.doTagComplete(xmlDocument, position, cancelChecker);
+	public AutoCloseTagResponse doTagComplete(DOMDocument xmlDocument, Position position,
+			XMLCompletionSettings completionSettings, CancelChecker cancelChecker) {
+		return completions.doTagComplete(xmlDocument, position, completionSettings, cancelChecker);
 	}
 
-	public AutoCloseTagResponse doAutoClose(DOMDocument xmlDocument, Position position, CancelChecker cancelChecker) {
+	public AutoCloseTagResponse doAutoClose(DOMDocument xmlDocument, Position position,
+			XMLCompletionSettings completionSettings, CancelChecker cancelChecker) {
 		try {
 			int offset = xmlDocument.offsetAt(position);
 			String text = xmlDocument.getText();
 			if (offset > 0) {
 				char c = text.charAt(offset - 1);
 				if (c == '>' || c == '/') {
-					return doTagComplete(xmlDocument, position, cancelChecker);
+					return doTagComplete(xmlDocument, position, completionSettings, cancelChecker);
 				}
 			}
 			return null;
@@ -283,4 +300,18 @@ public class XMLLanguageService extends XMLExtensionsRegistry implements IXMLFul
 		return XMLPositionUtility.getMatchingTagPosition(xmlDocument, position);
 	}
 
+	/**
+	 * Returns the linked editing ranges for the given <code>xmlDocument</code> at
+	 * the given <code>position</code> and null otherwise.
+	 * 
+	 * @param xmlDocument   the DOM document.
+	 * @param position      the position.
+	 * @param cancelChecker the cancel checker.
+	 * @return the linked editing ranges for the given <code>xmlDocument</code> at
+	 *         the given <code>position</code> and null otherwise.
+	 */
+	public LinkedEditingRanges findLinkedEditingRanges(DOMDocument xmlDocument, Position position,
+			CancelChecker cancelChecker) {
+		return linkedEditing.findLinkedEditingRanges(xmlDocument, position, cancelChecker);
+	}
 }

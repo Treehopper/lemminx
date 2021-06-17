@@ -15,6 +15,7 @@ package org.eclipse.lemminx.extensions.contentmodel;
 import static org.eclipse.lemminx.XMLAssert.pd;
 import static org.eclipse.lemminx.XMLAssert.r;
 
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import org.eclipse.lemminx.AbstractCacheBasedTest;
@@ -140,13 +141,15 @@ public class XMLSchemaPublishDiagnosticsTest extends AbstractCacheBasedTest {
 				"</invoice> \r\n" + //
 				"";
 
+		TimeUnit.SECONDS.sleep(2); // HACK: to make the timing work on slow machines
+
 		String expectedLocation = TEST_WORK_DIRECTORY.resolve("cache/http/invoice.xsd").toString();
 		XMLAssert.testPublishDiagnosticsFor(xml, fileURI, configuration,
 				pd(fileURI,
 						new Diagnostic(r(1, 1, 1, 8), "The resource 'http://invoice.xsd' is downloading.",
-								DiagnosticSeverity.Information, "XML")),
+								DiagnosticSeverity.Information, "xml")),
 				pd(fileURI, new Diagnostic(r(1, 1, 1, 8), "Error while downloading 'http://invoice.xsd' to "+expectedLocation+".",
-						DiagnosticSeverity.Error, "XML")));
+						DiagnosticSeverity.Error, "xml")));
 	}
 
 	@Test
